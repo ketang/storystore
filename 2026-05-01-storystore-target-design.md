@@ -1,0 +1,462 @@
+# storystore Target Design
+
+**Date:** 2026-05-01 (revised)
+**Status:** Target design. Supersedes the 2026-04-29 storystore design and the
+2026-04-30 revision notes. Where this doc and the three accompanying plans
+diverge from earlier drafts, this lock list wins.
+
+## Purpose
+
+`storystore` is a Bento plugin for durable intent stories in software
+repositories. Intent stories are long-lived, prose-first documents that
+describe what the software is for from a user perspective. They are written
+for humans first and agents second, but they have enough structure for agents
+to audit them, find affected stories before behavioral changes, and avoid
+silently rewriting intent to match implementation drift.
+
+The core rule is:
+
+> Code and tests are evidence. They are not automatic authority to rewrite
+> accepted intent.
+
+## Plugin Surface
+
+Package name:
+
+```text
+storystore
+```
+
+Display name:
+
+```text
+Storystore
+```
+
+Skills:
+
+```text
+stories-init
+stories-generate
+stories-audit
+stories-coverage
+stories-update
+stories-impact-check
+```
+
+The `stories-*` naming keeps skill discovery grouped and clear. The user-facing
+concept remains "intent stories"; the package name is `storystore`.
+
+## Repository Convention
+
+Consumer repositories store intent stories under:
+
+```text
+docs/stories/
+  README.md          # user-owned
+  INDEX.md           # plugin-owned, auto-generated
+  drift-todo.md      # gitignored, append-only
+  <slug>.md
+```
+
+There is no `CONVENTIONS.md`. The schema and tooling reference live with the
+plugin at `catalog/shared/storystore/spec.md` and are materialized into each
+skill's `references/` via the `shared_scripts` mechanism. Consumers who want
+repo-local conventions write their own file (the natural home is
+`docs/stories/README.md`).
+
+`stories-init` runs in two phases:
+
+- **Phase 1 (mechanical, `init.py`):** create `docs/stories/`, write a 3-sentence
+  `README.md` stub when absent, write an empty `INDEX.md`, add `drift-todo.md`
+  to `.gitignore`, detect agent-instruction files (`AGENTS.md`, `CLAUDE.md`,
+  `GEMINI.md`), and return JSON including `fresh_init: true | false`. Phase 1
+  is idempotent: any pre-existing `docs/stories/` means `fresh_init: false`.
+- **Phase 2 (LLM-driven authoring, SKILL.md):** runs only when
+  `fresh_init: true`. The agent invokes `list_candidates.py`, applies the
+  selection criteria documented in SKILL.md, and writes the top 5
+  observed-mode stories with real LLM-authored prose via
+  `write_story.py --observed`, then updates `INDEX.md`.
+
+There are no plugin-shipped seed stories. Stories written during init are
+indistinguishable from any other observed-mode story.
+
+After init, the agent offers a one-time pointer to root-level agent
+instruction files when present. Suppression marker
+`<!-- storystore: no-pointer -->` in any agent-instruction file silences
+follow-up audit findings about a missing pointer.
+
+Recommended pointer:
+
+```markdown
+- This repo uses intent stories under `docs/stories/`. Before making behavioral
+  changes to user-facing functionality, run `stories-impact-check`.
+```
+
+## Story Schema
+
+Stories use a strict YAML subset, parsed by a bundled stdlib-only parser. No
+PyYAML dependency.
+
+```yaml
+---
+schema_version: 1
+title: Human title
+slug: kebab-case-slug
+status: draft | active | deprecated
+authority: observed | accepted
+change_resistance: low | medium | high | immutable
+tests_applicable: true   # default true; omit when true
+locked_sections:
+  - Intent
+last_audited: YYYY-MM-DD
+---
+```
+
+Field meanings:
+
+- `schema_version`: optional integer; defaults to 1 when absent.
+  `stories-generate` writes it for new stories.
+- `status`: lifecycle state.
+- `authority`: source and normative weight of the story.
+- `change_resistance`: resistance to agent-authored meaning changes.
+- `tests_applicable`: defaults to `true`; opt out with `false` to suppress
+  `story-untested` and `test-evidence-missing` findings.
+- `locked_sections`: H2 sections that require explicit confirmation before an
+  agent can edit them.
+- `last_audited`: date of the latest clean audit. Written only by
+  `stories-audit --bump-clean`.
+
+### Validity Matrix
+
+`authority: observed` cannot have `change_resistance: high | immutable`.
+Violations are exit 3 (policy refusal).
+
+`tests_applicable: false` with non-empty `Evidence.Tests` is exit 2.
+
+### Status
+
+- `draft`: incomplete or under review. The bar to *create* a story is just
+  frontmatter + Intent. Anything missing is reported by audit/coverage
+  conditional on the section being present.
+- `active`: current and relevant to the software.
+- `deprecated`: intentionally obsolete. Tools may report stale matches but do
+  not gate active work on it.
+
+There is no `superseded`. Without supersession links it would be operationally
+identical to `deprecated`.
+
+### Authority
+
+- `observed`: inferred from current software behavior. Descriptive, not
+  normative. Stories generated by `stories-generate --observed` start here.
+- `accepted`: human-approved intended behavior. Stories generated by
+  `stories-generate --interview` start here.
+
+There is no `proposed`; that role collapses into `status: draft`.
+
+### Change Resistance
+
+- `low`: routine updates allowed when evidence supports them.
+- `medium`: agents must classify edit types and preserve meaning unless the
+  user approves a meaning change.
+- `high`: agents must stop before changing intent, boundaries, or auditable
+  claims.
+- `immutable`: unconditionally agent-immutable. Agents may refresh `Evidence`,
+  append `Drift Notes`, and bump `last_audited` via `stories-audit
+  --bump-clean`. Agents may not change `change_resistance`, `authority`, or
+  `status`; may not edit any locked section; may not edit inline locked
+  blocks; may not author meaning changes anywhere. Humans edit the frontmatter
+  directly to lower `change_resistance`.
+
+### Story Body
+
+Six sections. `Intent` is hard-required; missing Intent is exit 2. The other
+five are soft-required and audit/coverage are conditional on the content
+being present.
+
+```markdown
+# Human title
+
+## Intent
+
+One sentence describing why this capability exists from the user's
+perspective. Soft-enforced ≤ 2 sentences; longer Intent emits a
+low-severity nag finding.
+
+## Story
+
+Qualitative prose describing the user need and expected workflow.
+
+## Expected Behavior
+
+What the software should visibly do.
+
+## Boundaries
+
+What this story does not promise.
+
+## Auditable Claims
+
+- Concrete claim that can be checked against tests, commands, docs, source,
+  or generated output.
+
+## Evidence
+
+### Tests
+
+- `tests/...`
+
+### Surface
+
+- `cli: example`
+- `POST /example`
+
+### Docs
+
+- `README.md`
+
+## Drift Notes
+
+- Optional. Pointers to tracker issues or known unresolved mismatches.
+```
+
+The canonical placeholder Intent for observed-mode stories that the agent
+could not infer is the literal string:
+
+```text
+Inferred from code; not human-confirmed.
+```
+
+Coverage reports surface a one-line note listing slugs that still carry this
+placeholder.
+
+## Skill Responsibilities
+
+### stories-init
+
+Two-phase as described above. Idempotent. Never overwrites existing files.
+Phase 1 returns JSON. Phase 2 runs only on fresh init and writes the top 5
+observed-mode stories with real prose.
+
+### stories-generate
+
+Two modes, both LLM-driven:
+
+- `--interview`: writes `authority: accepted` after a short human interview.
+- `--observed`: writes `authority: observed` from the deterministic candidate
+  list (`list_candidates.py`). Selection criteria in SKILL.md prioritize
+  user-invoked surfaces, distinct workflows, and non-trivial intent.
+  Observed-mode bodies have real LLM-authored prose, not placeholders. The
+  default initial run produces 5 stories. `--limit N` overrides; re-runs
+  subtract already-authored slugs.
+
+The bar for a valid story is low: frontmatter + Intent. Everything else is
+optional and tooling does what it can with what is present.
+
+### stories-audit
+
+Read-only story-to-software fidelity report. Answers:
+
+> Do existing stories still accurately describe the software surfaces and
+> evidence they claim?
+
+`stories-audit --bump-clean` writes `last_audited` for stories with zero
+findings in the run (with D-pass, includes narrative-clean). There is no
+separate `mark_audited.py` script.
+
+`stories-audit --story <slug>` (repeatable) runs scoped audit: skips coverage
+findings, skips full inventory build, resolves only the targeted stories'
+refs. Used by `stories-update` before edits.
+
+`stories-audit --thorough` opts in to non-TS language coverage. The agent
+reads the codebase, builds inferred surface JSON, and passes it via
+`--inferred-surface <path>`. Inferred entries are marked `[inferred]` in
+finding bodies. No severity reduction.
+
+### stories-coverage
+
+Read-only software-to-story coverage report. Answers:
+
+> What user-facing software behavior lacks story coverage?
+
+Reports uncovered surfaces, untested stories, and incomplete stories ranked
+by completeness score. Supports `--thorough` for non-TS stacks.
+
+### stories-update
+
+Guarded editing for existing stories. Always invokes
+`stories-audit --story <slug>` before edits. Findings on targeted stories
+block silent updates and require human drift triage. Edit class is
+honor-system; structural backstops in `lock_check.py` enforce locked sections,
+inline locked-block byte equality, frontmatter changes, and `Auditable
+Claims` bullet-count guard.
+
+### stories-impact-check
+
+Read-only pre-change lookup. Hard trigger before any behavioral change to
+user-facing surfaces. The skill returns affected stories with status,
+authority, change resistance, locked sections, intent excerpt, and match
+reasons.
+
+Behavior table:
+
+```text
+active + immutable:    stop and ask before proceeding
+active + high:         alert user, ask confirmation
+active + medium:       mention affected stories; proceed unless user objects
+active + low:          mention affected stories after the change is applied
+authority: observed:   mention only; do not gate
+status: draft:         mention only unless change_resistance is high/immutable
+status: deprecated:    report as stale match; do not gate
+```
+
+Hook-based enforcement is deferred. The hard trigger is description-driven
+only; this limitation is acknowledged.
+
+## Script I/O And Reports
+
+Scripts use JSON for structured input and output. User-facing audit and
+coverage reports are Markdown. Common finding shape:
+
+```text
+kind, story_slug (null for repo-level), severity, suggested_action
+  (fix-code | update-story | add-evidence | triage), kind-specific body
+```
+
+Severity derives from `change_resistance`: low/medium/high/immutable →
+low/medium/high/high+flagged. `intent-conflict` is fixed high.
+`agent-pointer-missing` is fixed low.
+
+### Performance Instrumentation
+
+Each script (`audit.py`, `coverage.py`, `impact_check.py`) emits a
+`performance` block in stdout JSON:
+
+```json
+{
+  "performance": {
+    "duration_ms": 0,
+    "stories_scanned": 0,
+    "evidence_refs_resolved": 0,
+    "phase_breakdown": {}
+  }
+}
+```
+
+Stderr threshold warning when over: impact-check 500ms, audit/coverage 5s.
+Override via env var `STORYSTORE_PERF_WARN_MS` or flag `--perf-warn-ms`
+(0 disables). `PerfTimer` helper lives in `storystore_lib.py`. No durable
+perf log file in v1.
+
+### Exit Codes
+
+```text
+0  success
+1  findings in --strict mode
+2  invalid input, malformed story, or missing repository setup
+3  policy refusal (locked-without-confirmation, immutable rule violation,
+   validity-matrix violation)
+4+ unexpected runtime error
+```
+
+Stderr always carries a one-line human-readable explanation.
+
+Default report paths:
+
+```text
+/tmp/stories-audit-<timestamp>.md
+/tmp/stories-coverage-<timestamp>.md
+```
+
+## Shared Scripts
+
+Canonical shared code lives under:
+
+```text
+catalog/shared/storystore/
+  storystore_lib.py
+  inventory.py
+  spec.md
+```
+
+Skills declare shared scripts in `packaging.json`:
+
+```json
+{
+  "shared_scripts": [
+    "storystore/storystore_lib.py",
+    "storystore/inventory.py",
+    "storystore/spec.md"
+  ]
+}
+```
+
+`scripts/build-plugins` materializes those files into both:
+
+1. canonical skill dirs (`catalog/skills/<skill>/scripts/<file>` and
+   `references/<file>`, as applicable; gitignored), and
+2. plugin output dirs (existing behavior).
+
+`--shared-only` is a fast mode for tests/dev. `tests/conftest.py`
+auto-materializes if missing on first test run. Scripts can `import
+storystore_lib` naturally with no path tricks.
+
+The field name is `shared_scripts`, not `shared_modules`.
+
+## Frontmatter Parser
+
+Stdlib only. `parse_frontmatter` lives in `storystore_lib.py`. Strict YAML
+subset:
+
+- top-level mapping;
+- scalars (unquoted strings, ISO dates, booleans);
+- one list field, flow `[a, b]` or block `- a` form.
+
+Disallowed: anchors, aliases, nested mappings, multi-line strings, flow
+mappings. Unknown keys are errors. Enum values are checked. Implementation is
+a lexer + parser, not regex chains. Error messages include line and column.
+
+## Slugs
+
+Kebab-case ASCII, target 4–8 words, no length limit beyond filesystem reality.
+Fewer than 2 words is exit 2. 2–3 or 9+ words emit stderr nag
+`STORYSTORE_SLUG_NAG: ...` and accept. Slugs are stable (never rename) and
+flat (no hierarchy). Loader skip list when scanning `docs/stories/`:
+`README.md`, `INDEX.md`, `drift-todo.md`.
+
+## Vendored And Monorepo Layouts
+
+`inventory.py` ships `DEFAULT_SKIP_DIRS`: `.git`, `node_modules`, `vendor`,
+`dist`, `build`, `out`, `target`, `__pycache__`, `.venv`, `venv`, `.tox`,
+`.next`, `.nuxt`, `.cache`, `.pytest_cache`, `coverage`, `.idea`, `.vscode`.
+Walk skips any directory whose basename is in the set. `audit.py` /
+`coverage.py` accept `--source-root <relative-path>` and `--include-dir
+<name>` (repeatable; removes from skip set for this run). No `.gitignore`
+integration in v1.
+
+## Non-Goals For V1
+
+- No CI integration.
+- No PreToolUse hook (description-driven hard trigger only; limitation
+  acknowledged).
+- No semantic embedding for impact-check description matching.
+- No language coverage beyond TypeScript without `--thorough`.
+- No automatic CONVENTIONS.md refresh (CONVENTIONS.md was killed).
+- No story migration logic (`schema_version: 1` is the only version).
+- No durable perf log file.
+- No impact-index cache.
+- No `mark_audited.py` separate script (folded into `stories-audit
+  --bump-clean`).
+- No `group` field anywhere.
+- No `--audit-report` reuse mechanism for `stories-update`.
+- No git-history introspection for skipped-impact-check detection.
+
+## Rollout
+
+Phase 1: foundation, init, generation.
+Phase 2: shared modules, audit, coverage, completeness scoring.
+Phase 3: guarded updates, impact check, perf instrumentation.
+
+Each phase must leave the plugin usable and must include tests plus generated
+plugin output.

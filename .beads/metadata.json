@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "storystore",
+  "project_id": "93422518-40cc-44d2-9eec-1305d427de2f"
+}
