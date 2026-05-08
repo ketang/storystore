@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Build the Claude and Codex plugin payloads for storystore.
+
+Reads each canonical skill at skills/<name>/SKILL.md and emits:
+  .claude-plugin/plugin.json   Claude plugin manifest
+  .claude/skills/<name>.md     Claude per-skill flat file
+  .codex-plugin/plugin.json    Codex plugin manifest
+  .codex-plugin/skills/<name>/SKILL.md  Codex per-skill payload
+
+Storystore ships no static assets and no compiled frontend, so the build
+is a manifest-and-skill-copy operation only.
+"""
+
+import argparse
+import json
+import shutil
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+VERSION_FILE = ROOT / "plugin-version.json"
+
+PLUGIN_NAME = "storystore"
+DESCRIPTION = "Intent-story documentation with audits, guarded edits, and impact checks"
+DISPLAY_NAME = "Storystore"
+SHORT_DESCRIPTION = "Durable user intent for software repos"
+LONG_DESCRIPTION = (
+    "Storystore maintains long-lived, prose-first intent stories under "
+    "docs/stories/. Each story describes a user-facing capability of the "
+    "software, written for humans first and agents second. The plugin "
+    "ships authoring, audit, coverage, guarded-edit, and impact-check "
+    "skills so agents treat code and tests as evidence rather than "
+    "automatic authority to rewrite accepted intent."
+)
+OWNER_NAME = "Ketan Gangatirkar"
+OWNER_EMAIL = "ketan@gangatirkar.com"
+OWNER_URL = "https://github.com/ketang"
+REPO_URL = "https://github.com/ketang/storystore"
+LICENSE = "MIT"
+KEYWORDS = ["documentation", "stories", "intent", "audit", "drift"]
+CATEGORY = "Documentation"
+CAPABILITIES = ["Interactive", "Write"]
+DEFAULT_PROMPTS = [
+    "Initialize intent stories for this repository under docs/stories/.",
+    "Run a stories-coverage report and tell me which user-facing surfaces lack story coverage.",
+]
+
+SKILL_NAMES = [
+    "stories-init",
+    "stories-generate",
+    "stories-audit",
+    "stories-coverage",
+    "stories-update",
+    "stories-impact-check",
+]
+
+
+def read_version() -> str:
+    return json.loads(VERSION_FILE.read_text())["version"]
+
+
+def bump_version(version: str) -> str:
+    parts = version.split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    return ".".join(parts)
+
+
+def write_json(path: Path, data: object, verbose: bool = False) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    if verbose:
+        print(f"  wrote {path.relative_to(ROOT)}")
+
+
+def claude_manifest(version: str) -> dict:
+    return {
+        "name": PLUGIN_NAME,
+        "description": DESCRIPTION,
+        "version": version,
+        "author": {"name": OWNER_NAME},
+    }
+
+
+def codex_manifest(version: str) -> dict:
+    return {
+        "name": PLUGIN_NAME,
+        "version": version,
+        "description": DESCRIPTION,
+        "author": {"name": OWNER_NAME, "email": OWNER_EMAIL, "url": OWNER_URL},
+        "homepage": REPO_URL,
+        "repository": REPO_URL,
+        "license": LICENSE,
+        "keywords": KEYWORDS,
+        "skills": "./.codex-plugin/skills",
+        "interface": {
+            "displayName": DISPLAY_NAME,
+            "shortDescription": SHORT_DESCRIPTION,
+            "longDescription": LONG_DESCRIPTION,
+            "developerName": OWNER_NAME,
+            "category": CATEGORY,
+            "capabilities": CAPABILITIES,
+            "websiteURL": REPO_URL,
+            "privacyPolicyURL": REPO_URL,
+            "termsOfServiceURL": REPO_URL,
+            "defaultPrompt": DEFAULT_PROMPTS,
+        },
+    }
+
+
+def skill_source(name: str) -> Path:
+    return ROOT / "skills" / name / "SKILL.md"
+
+
+def ensure_skill_sources() -> None:
+    missing = [n for n in SKILL_NAMES if not skill_source(n).exists()]
+    if missing:
+        joined = ", ".join(missing)
+        raise SystemExit(
+            f"missing canonical SKILL.md for: {joined}. "
+            f"These files are hand-edited sources and must exist before build."
+        )
+
+
+def write_claude_skills(verbose: bool = False) -> None:
+    target_dir = ROOT / ".claude" / "skills"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for name in SKILL_NAMES:
+        target = target_dir / f"{name}.md"
+        target.write_text(skill_source(name).read_text())
+        if verbose:
+            print(f"  wrote {target.relative_to(ROOT)}")
+
+
+def write_codex_skills(verbose: bool = False) -> None:
+    target_root = ROOT / ".codex-plugin" / "skills"
+    if target_root.exists():
+        shutil.rmtree(target_root)
+    for name in SKILL_NAMES:
+        target_dir = target_root / name
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / "SKILL.md"
+        target.write_text(skill_source(name).read_text())
+        if verbose:
+            print(f"  wrote {target.relative_to(ROOT)}")
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="build-plugin",
+        description="Build the Claude and Codex plugin manifests and skill payloads.",
+    )
+    parser.add_argument(
+        "--bump",
+        action="store_true",
+        help="increment the patch version before building",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="print each output path as it is written",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    ensure_skill_sources()
+    version = read_version()
+    if args.bump:
+        version = bump_version(version)
+        write_json(VERSION_FILE, {"version": version})
+        print(f"Bumped to {version}")
+    write_json(ROOT / ".claude-plugin" / "plugin.json", claude_manifest(version), args.verbose)
+    write_json(ROOT / ".codex-plugin" / "plugin.json", codex_manifest(version), args.verbose)
+    write_claude_skills(args.verbose)
+    write_codex_skills(args.verbose)
+    print(f"Built plugin v{version}")
+
+
+if __name__ == "__main__":
+    main()

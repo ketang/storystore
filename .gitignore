@@ -1,5 +1,19 @@
-
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
 .beads-credential-key
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Worktrees and superpowers scratch
+.worktrees/
+.superpowers/
+
+# Track Claude/Codex skill build outputs explicitly so consumers
+# get a working plugin without running the build script.
+!.claude/
+!.claude/skills/
+!.claude/skills/**

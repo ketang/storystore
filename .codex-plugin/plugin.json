@@ -1,0 +1,39 @@
+{
+  "name": "storystore",
+  "version": "0.1.0",
+  "description": "Intent-story documentation with audits, guarded edits, and impact checks",
+  "author": {
+    "name": "Ketan Gangatirkar",
+    "email": "ketan@gangatirkar.com",
+    "url": "https://github.com/ketang"
+  },
+  "homepage": "https://github.com/ketang/storystore",
+  "repository": "https://github.com/ketang/storystore",
+  "license": "MIT",
+  "keywords": [
+    "documentation",
+    "stories",
+    "intent",
+    "audit",
+    "drift"
+  ],
+  "skills": "./.codex-plugin/skills",
+  "interface": {
+    "displayName": "Storystore",
+    "shortDescription": "Durable user intent for software repos",
+    "longDescription": "Storystore maintains long-lived, prose-first intent stories under docs/stories/. Each story describes a user-facing capability of the software, written for humans first and agents second. The plugin ships authoring, audit, coverage, guarded-edit, and impact-check skills so agents treat code and tests as evidence rather than automatic authority to rewrite accepted intent.",
+    "developerName": "Ketan Gangatirkar",
+    "category": "Documentation",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/ketang/storystore",
+    "privacyPolicyURL": "https://github.com/ketang/storystore",
+    "termsOfServiceURL": "https://github.com/ketang/storystore",
+    "defaultPrompt": [
+      "Initialize intent stories for this repository under docs/stories/.",
+      "Run a stories-coverage report and tell me which user-facing surfaces lack story coverage."
+    ]
+  }
+}
