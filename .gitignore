@@ -12,6 +12,12 @@ __pycache__/
 .worktrees/
 .superpowers/
 
+# Shared scripts materialized into canonical skill dirs by build-plugin.
+# Authoritative copies live under shared/; these are build outputs.
+skills/*/scripts/storystore_lib.py
+skills/*/scripts/inventory.py
+skills/*/references/spec.md
+
 # Track Claude/Codex skill build outputs explicitly so consumers
 # get a working plugin without running the build script.
 !.claude/

@@ -7,8 +7,11 @@ Reads each canonical skill at skills/<name>/SKILL.md and emits:
   .codex-plugin/plugin.json    Codex plugin manifest
   .codex-plugin/skills/<name>/SKILL.md  Codex per-skill payload
 
-Storystore ships no static assets and no compiled frontend, so the build
-is a manifest-and-skill-copy operation only.
+Skills that declare shared_scripts in packaging.json get those files
+materialized into their canonical scripts/ or references/ dirs and into
+the Codex plugin output. packaging.json is never copied to plugin output.
+
+Use --shared-only to materialize shared scripts without a full rebuild.
 """
 
 import argparse
@@ -19,6 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "plugin-version.json"
+SHARED_ROOT = ROOT / "shared"
 
 PLUGIN_NAME = "storystore"
 DESCRIPTION = "Intent-story documentation with audits, guarded edits, and impact checks"
@@ -53,6 +57,81 @@ SKILL_NAMES = [
     "stories-update",
     "stories-impact-check",
 ]
+
+
+def _shared_target_subdir(filename: str) -> str:
+    return "scripts" if filename.endswith(".py") else "references"
+
+
+def _validate_shared_path(rel_path: str, skill_name: str) -> None:
+    p = Path(rel_path)
+    if p.is_absolute():
+        raise SystemExit(f"invalid shared path in {skill_name}/packaging.json (absolute path): {rel_path!r}")
+    if ".." in p.parts:
+        raise SystemExit(f"invalid shared path in {skill_name}/packaging.json (path traversal): {rel_path!r}")
+
+
+def read_packaging(skill_name: str) -> list[str]:
+    """Read, validate, and return sorted shared_scripts for a skill."""
+    pkg_file = ROOT / "skills" / skill_name / "packaging.json"
+    if not pkg_file.exists():
+        return []
+    try:
+        data = json.loads(pkg_file.read_text())
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"malformed packaging.json in {skill_name}: {exc}")
+    if not isinstance(data, dict):
+        raise SystemExit(f"{skill_name}/packaging.json must be a JSON object")
+    shared = data.get("shared_scripts", [])
+    if not isinstance(shared, list):
+        raise SystemExit(f"shared_scripts in {skill_name}/packaging.json must be a list")
+    for entry in shared:
+        if not isinstance(entry, str):
+            raise SystemExit(
+                f"shared_scripts in {skill_name}/packaging.json must contain only strings, got {entry!r}"
+            )
+        _validate_shared_path(entry, skill_name)
+        src = SHARED_ROOT / entry
+        if not src.exists():
+            raise SystemExit(
+                f"shared file not found: shared/{entry} (declared in {skill_name}/packaging.json)"
+            )
+    return sorted(shared)
+
+
+def _copy_shared_file(src: Path, dst: Path, verbose: bool) -> None:
+    """Copy src to dst preserving mode. Raises SystemExit on content collision."""
+    if dst.exists():
+        if dst.read_bytes() != src.read_bytes():
+            raise SystemExit(
+                f"collision: {dst.relative_to(ROOT)} exists with different content "
+                f"than shared/{src.name}"
+            )
+        dst.chmod(src.stat().st_mode)
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    dst.chmod(src.stat().st_mode)
+    if verbose:
+        print(f"  wrote {dst.relative_to(ROOT)}")
+
+
+def materialize_shared(skill_name: str, verbose: bool = False) -> None:
+    """Materialize shared_scripts for a skill into canonical and Codex dirs."""
+    entries = read_packaging(skill_name)
+    for rel_path in entries:
+        src = SHARED_ROOT / rel_path
+        subdir = _shared_target_subdir(src.name)
+        _copy_shared_file(
+            src,
+            ROOT / "skills" / skill_name / subdir / src.name,
+            verbose,
+        )
+        _copy_shared_file(
+            src,
+            ROOT / ".codex-plugin" / "skills" / skill_name / subdir / src.name,
+            verbose,
+        )
 
 
 def read_version() -> str:
@@ -160,11 +239,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="print each output path as it is written",
     )
+    parser.add_argument(
+        "--shared-only",
+        action="store_true",
+        help="materialize shared scripts only; skip manifest and skill writes",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.shared_only:
+        for name in SKILL_NAMES:
+            materialize_shared(name, args.verbose)
+        print("Materialized shared scripts")
+        return
     ensure_skill_sources()
     version = read_version()
     if args.bump:
@@ -175,6 +264,8 @@ def main(argv: list[str] | None = None) -> None:
     write_json(ROOT / ".codex-plugin" / "plugin.json", codex_manifest(version), args.verbose)
     write_claude_skills(args.verbose)
     write_codex_skills(args.verbose)
+    for name in SKILL_NAMES:
+        materialize_shared(name, args.verbose)
     print(f"Built plugin v{version}")
 
 
