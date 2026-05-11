@@ -103,7 +103,7 @@ def run_build_in(tmp_path: Path) -> Path:
     """Copy the canonical sources into tmp_path and run build-plugin there."""
     import shutil
 
-    for sub in ("skills", "scripts"):
+    for sub in ("skills", "scripts", "shared"):
         shutil.copytree(REPO_ROOT / sub, tmp_path / sub)
     shutil.copy(REPO_ROOT / "plugin-version.json", tmp_path / "plugin-version.json")
     result = subprocess.run(
@@ -179,7 +179,7 @@ def test_build_bump_increments_patch(tmp_path):
 def test_build_aborts_when_canonical_skill_missing(tmp_path):
     import shutil
 
-    for sub in ("skills", "scripts"):
+    for sub in ("skills", "scripts", "shared"):
         shutil.copytree(REPO_ROOT / sub, tmp_path / sub)
     shutil.copy(REPO_ROOT / "plugin-version.json", tmp_path / "plugin-version.json")
     (tmp_path / "skills" / "stories-init" / "SKILL.md").unlink()

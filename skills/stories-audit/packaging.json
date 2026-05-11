@@ -1,0 +1,7 @@
+{
+  "shared_scripts": [
+    "inventory.py",
+    "spec.md",
+    "storystore_lib.py"
+  ]
+}
