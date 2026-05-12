@@ -45,6 +45,23 @@ scripts/build-plugin --bump   # bump patch version then build
 scripts/build-plugin -v       # print each output path
 ```
 
+## Install For Codex
+
+From a checkout:
+
+```bash
+scripts/install-codex-plugin
+```
+
+Or directly from GitHub:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ketang/storystore/main/scripts/install-codex-plugin | bash
+```
+
+Use `bash -s -- --help` after the pipe to see installer options, including
+`--skip-register`, `--codex-home`, and `--marketplace-root`.
+
 ## Status
 
 Bootstrap only. Skills are placeholder SKILL.md stubs. The phased

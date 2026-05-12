@@ -1,0 +1,368 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PLUGIN_NAME="storystore"
+DISPLAY_NAME="Storystore"
+CATEGORY="Documentation"
+DEFAULT_REPO_URL="https://github.com/ketang/storystore"
+DEFAULT_REF="main"
+DEFAULT_INSTALL_POLICY="INSTALLED_BY_DEFAULT"
+DEFAULT_AUTH_POLICY="ON_INSTALL"
+
+source_dir=""
+codex_home="${CODEX_HOME:-$HOME/.codex}"
+marketplace_root=""
+codex_bin="${CODEX:-codex}"
+repo_url="${STORYSTORE_REPO_URL:-$DEFAULT_REPO_URL}"
+repo_ref="${STORYSTORE_REF:-$DEFAULT_REF}"
+install_policy="$DEFAULT_INSTALL_POLICY"
+auth_policy="$DEFAULT_AUTH_POLICY"
+build_mode="auto"
+skip_register=0
+dry_run=0
+verbose=0
+temp_root=""
+
+usage() {
+  cat <<'USAGE'
+Install the Storystore Codex plugin into a local Codex marketplace.
+
+Usage:
+  scripts/install-codex-plugin [options]
+  curl -fsSL https://raw.githubusercontent.com/ketang/storystore/main/scripts/install-codex-plugin | bash
+
+Options:
+  --source <path>                 Install from a local Storystore checkout.
+  --repo-url <url>                GitHub repository URL for curl installs.
+  --ref <ref>                     Git ref to download when no source checkout is available.
+  --codex-home <path>             Codex home to register against.
+  --marketplace-root <path>       Marketplace root to write.
+  --codex <command>               Codex executable for registration.
+  --install-policy <policy>       AVAILABLE, INSTALLED_BY_DEFAULT, or NOT_AVAILABLE.
+  --authentication-policy <policy> ON_INSTALL or ON_USE.
+  --build                         Run scripts/build-plugin before installing.
+  --skip-build                    Do not run scripts/build-plugin.
+  --skip-register                 Write files but do not run codex plugin marketplace add.
+  --dry-run                       Print the plan without writing files.
+  -v, --verbose                   Print major installation steps.
+  -h, --help                      Show this help.
+
+Environment:
+  CODEX_HOME          Default Codex home.
+  CODEX               Codex executable.
+  STORYSTORE_REPO_URL Repository URL for curl installs.
+  STORYSTORE_REF      Git ref for curl installs.
+USAGE
+}
+
+log() {
+  if [ "$verbose" -eq 1 ]; then
+    printf '%s\n' "$*"
+  fi
+}
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+cleanup() {
+  if [ -n "$temp_root" ] && [ -d "$temp_root" ]; then
+    rm -rf "$temp_root"
+  fi
+}
+trap cleanup EXIT
+
+abs_path() {
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    *) printf '%s\n' "$PWD/$1" ;;
+  esac
+}
+
+parse_install_policy() {
+  case "$1" in
+    AVAILABLE|INSTALLED_BY_DEFAULT|NOT_AVAILABLE) ;;
+    *) die "invalid --install-policy: $1" ;;
+  esac
+}
+
+parse_auth_policy() {
+  case "$1" in
+    ON_INSTALL|ON_USE) ;;
+    *) die "invalid --authentication-policy: $1" ;;
+  esac
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --source)
+      [ "$#" -ge 2 ] || die "--source requires a path"
+      source_dir="$2"
+      shift 2
+      ;;
+    --repo-url)
+      [ "$#" -ge 2 ] || die "--repo-url requires a URL"
+      repo_url="$2"
+      shift 2
+      ;;
+    --ref)
+      [ "$#" -ge 2 ] || die "--ref requires a git ref"
+      repo_ref="$2"
+      shift 2
+      ;;
+    --codex-home)
+      [ "$#" -ge 2 ] || die "--codex-home requires a path"
+      codex_home="$2"
+      shift 2
+      ;;
+    --marketplace-root)
+      [ "$#" -ge 2 ] || die "--marketplace-root requires a path"
+      marketplace_root="$2"
+      shift 2
+      ;;
+    --codex)
+      [ "$#" -ge 2 ] || die "--codex requires a command"
+      codex_bin="$2"
+      shift 2
+      ;;
+    --install-policy)
+      [ "$#" -ge 2 ] || die "--install-policy requires a value"
+      parse_install_policy "$2"
+      install_policy="$2"
+      shift 2
+      ;;
+    --authentication-policy)
+      [ "$#" -ge 2 ] || die "--authentication-policy requires a value"
+      parse_auth_policy "$2"
+      auth_policy="$2"
+      shift 2
+      ;;
+    --build)
+      build_mode="yes"
+      shift
+      ;;
+    --skip-build)
+      build_mode="no"
+      shift
+      ;;
+    --skip-register)
+      skip_register=1
+      shift
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -v|--verbose)
+      verbose=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      die "unknown option: $1"
+      ;;
+  esac
+done
+
+download_source() {
+  command -v curl >/dev/null 2>&1 || die "curl is required when installing without --source"
+  command -v tar >/dev/null 2>&1 || die "tar is required when installing without --source"
+
+  local clean_url owner repo archive_url
+  clean_url="${repo_url%.git}"
+  clean_url="${clean_url#https://github.com/}"
+  clean_url="${clean_url#http://github.com/}"
+  owner="${clean_url%%/*}"
+  repo="${clean_url#*/}"
+  [ -n "$owner" ] && [ -n "$repo" ] && [ "$owner" != "$repo" ] || die "unsupported GitHub repo URL: $repo_url"
+
+  temp_root="$(mktemp -d)"
+  mkdir -p "$temp_root/source"
+  archive_url="https://codeload.github.com/$owner/$repo/tar.gz/$repo_ref"
+  log "Downloading $archive_url"
+  curl -fsSL "$archive_url" | tar -xz --strip-components=1 -C "$temp_root/source"
+  source_dir="$temp_root/source"
+}
+
+is_storystore_source() {
+  [ -f "$1/.codex-plugin/plugin.json" ] \
+    && grep -Eq '"name"[[:space:]]*:[[:space:]]*"storystore"' "$1/.codex-plugin/plugin.json"
+}
+
+script_source_dir() {
+  local script_path script_dir candidate
+  script_path="${BASH_SOURCE[0]}"
+  case "$script_path" in
+    /*|*/*) ;;
+    *) return 1 ;;
+  esac
+  script_dir="$(cd "$(dirname "$script_path")" 2>/dev/null && pwd -P)" || return 1
+  candidate="$(cd "$script_dir/.." 2>/dev/null && pwd -P)" || return 1
+  is_storystore_source "$candidate" || return 1
+  printf '%s\n' "$candidate"
+}
+
+detect_source() {
+  local detected_source
+
+  if [ -n "$source_dir" ]; then
+    source_dir="$(abs_path "$source_dir")"
+    return
+  fi
+
+  if detected_source="$(script_source_dir)"; then
+    source_dir="$detected_source"
+    return
+  fi
+
+  if is_storystore_source "$PWD"; then
+    source_dir="$PWD"
+    return
+  fi
+
+  download_source
+}
+
+validate_source() {
+  [ -d "$source_dir" ] || die "source path does not exist: $source_dir"
+  [ -f "$source_dir/.codex-plugin/plugin.json" ] || die "missing .codex-plugin/plugin.json in $source_dir"
+  [ -d "$source_dir/.codex-plugin/skills" ] || die "missing .codex-plugin/skills in $source_dir"
+  [ -f "$source_dir/plugin-version.json" ] || die "missing plugin-version.json in $source_dir"
+  grep -Eq '"name"[[:space:]]*:[[:space:]]*"storystore"' "$source_dir/.codex-plugin/plugin.json" \
+    || die ".codex-plugin/plugin.json must declare name \"storystore\""
+}
+
+run_build_if_needed() {
+  case "$build_mode" in
+    no) return ;;
+    auto)
+      [ -n "$temp_root" ] && return
+      [ -x "$source_dir/scripts/build-plugin" ] || return
+      ;;
+    yes)
+      [ -x "$source_dir/scripts/build-plugin" ] || die "scripts/build-plugin is not executable"
+      ;;
+  esac
+  command -v python3 >/dev/null 2>&1 || die "python3 is required to run scripts/build-plugin"
+  log "Running scripts/build-plugin"
+  (cd "$source_dir" && python3 scripts/build-plugin)
+}
+
+copy_path_if_present() {
+  local relative_path="$1"
+  local src="$source_dir/$relative_path"
+  local dst="$1"
+  if [ ! -e "$src" ]; then
+    return 0
+  fi
+  log "Copying $relative_path"
+  if [ -d "$src" ]; then
+    cp -R "$src" "$dst"
+  else
+    mkdir -p "$(dirname "$dst")"
+    cp -p "$src" "$dst"
+  fi
+}
+
+install_payload() {
+  local plugins_dir plugin_target temporary_target
+  plugins_dir="$marketplace_root/plugins"
+  plugin_target="$plugins_dir/$PLUGIN_NAME"
+  temporary_target="$plugins_dir/.$PLUGIN_NAME.installing"
+
+  mkdir -p "$plugins_dir"
+  rm -rf "$temporary_target"
+  mkdir -p "$temporary_target"
+  (
+    cd "$temporary_target"
+    copy_path_if_present ".codex-plugin"
+    copy_path_if_present "plugin-version.json"
+    copy_path_if_present "README.md"
+    copy_path_if_present "INSTALL.md"
+  )
+  rm -rf "$plugin_target"
+  mv "$temporary_target" "$plugin_target"
+}
+
+write_marketplace_manifest() {
+  local manifest_path
+  manifest_path="$marketplace_root/.agents/plugins/marketplace.json"
+  mkdir -p "$(dirname "$manifest_path")"
+  cat >"$manifest_path" <<JSON
+{
+  "name": "$PLUGIN_NAME",
+  "interface": {
+    "displayName": "$DISPLAY_NAME"
+  },
+  "plugins": [
+    {
+      "name": "$PLUGIN_NAME",
+      "source": {
+        "source": "local",
+        "path": "./plugins/$PLUGIN_NAME"
+      },
+      "policy": {
+        "installation": "$install_policy",
+        "authentication": "$auth_policy"
+      },
+      "category": "$CATEGORY"
+    }
+  ]
+}
+JSON
+}
+
+register_marketplace() {
+  mkdir -p "$codex_home"
+  CODEX_HOME="$codex_home" "$codex_bin" plugin marketplace add "$marketplace_root"
+}
+
+detect_source
+codex_home="$(abs_path "$codex_home")"
+if [ -z "$marketplace_root" ]; then
+  marketplace_root="$codex_home/marketplaces/$PLUGIN_NAME"
+else
+  marketplace_root="$(abs_path "$marketplace_root")"
+fi
+
+validate_source
+
+if [ "$dry_run" -eq 1 ]; then
+  cat <<PLAN
+Would install Storystore Codex plugin
+  Source: $source_dir
+  Codex home: $codex_home
+  Marketplace root: $marketplace_root
+  Plugin target: $marketplace_root/plugins/$PLUGIN_NAME
+  Build mode: $build_mode
+  Register marketplace: $([ "$skip_register" -eq 1 ] && printf 'no' || printf 'yes')
+PLAN
+  exit 0
+fi
+
+run_build_if_needed
+validate_source
+install_payload
+write_marketplace_manifest
+
+if [ "$skip_register" -eq 1 ]; then
+  cat <<DONE
+Installed Storystore Codex plugin files.
+Marketplace root: $marketplace_root
+Plugin root: $marketplace_root/plugins/$PLUGIN_NAME
+Register later with: CODEX_HOME='$codex_home' $codex_bin plugin marketplace add '$marketplace_root'
+DONE
+  exit 0
+fi
+
+register_marketplace
+cat <<DONE
+Installed Storystore Codex plugin.
+Marketplace root: $marketplace_root
+Plugin root: $marketplace_root/plugins/$PLUGIN_NAME
+Restart any running Codex session to load the plugin.
+DONE
