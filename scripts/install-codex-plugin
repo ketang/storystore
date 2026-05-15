@@ -321,6 +321,47 @@ register_marketplace() {
   CODEX_HOME="$codex_home" "$codex_bin" plugin marketplace add "$marketplace_root"
 }
 
+enable_plugin_config() {
+  local config_path tmp_path
+  config_path="$codex_home/config.toml"
+  tmp_path="$config_path.tmp.$$"
+
+  mkdir -p "$(dirname "$config_path")"
+  touch "$config_path"
+
+  awk -v section='[plugins."storystore@storystore"]' '
+    $0 == section {
+      in_section = 1
+      found_section = 1
+      print
+      next
+    }
+    in_section && /^\[/ {
+      if (!wrote_enabled) {
+        print "enabled = true"
+      }
+      in_section = 0
+    }
+    in_section && /^[[:space:]]*enabled[[:space:]]*=/ {
+      print "enabled = true"
+      wrote_enabled = 1
+      next
+    }
+    { print }
+    END {
+      if (in_section && !wrote_enabled) {
+        print "enabled = true"
+      }
+      if (!found_section) {
+        print ""
+        print section
+        print "enabled = true"
+      }
+    }
+  ' "$config_path" >"$tmp_path"
+  mv "$tmp_path" "$config_path"
+}
+
 detect_source
 codex_home="$(abs_path "$codex_home")"
 if [ -z "$marketplace_root" ]; then
@@ -360,6 +401,7 @@ DONE
 fi
 
 register_marketplace
+enable_plugin_config
 cat <<DONE
 Installed Storystore Codex plugin.
 Marketplace root: $marketplace_root
