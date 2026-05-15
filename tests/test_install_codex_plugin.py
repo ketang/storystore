@@ -121,3 +121,28 @@ def test_installer_writes_local_marketplace(tmp_path: Path) -> None:
         "authentication": "ON_INSTALL",
     }
     assert plugin_entry["category"] == "Documentation"
+
+
+def test_installer_enables_plugin_when_registered(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    create_source_tree(source)
+    marketplace = tmp_path / "marketplace"
+    codex_home = tmp_path / "codex-home"
+
+    result = run_installer(
+        "--source",
+        str(source),
+        "--codex-home",
+        str(codex_home),
+        "--marketplace-root",
+        str(marketplace),
+        "--skip-build",
+        "--codex",
+        "true",
+    )
+
+    assert result.returncode == 0, result.stderr
+    config = (codex_home / "config.toml").read_text()
+    assert '[plugins."storystore@storystore"]' in config
+    assert "enabled = true" in config
