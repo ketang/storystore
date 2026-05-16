@@ -119,8 +119,9 @@ Phase 2 is LLM-driven and lives in SKILL.md. It runs only when
 1. invokes `list_candidates.py`;
 2. applies the SKILL.md selection criteria (user-invoked surfaces, distinct
    workflows, non-trivial intent);
-3. writes the top 5 observed-mode stories with real LLM-authored prose via
-   `write_story.py --observed`;
+3. writes observed-mode stories with real LLM-authored prose via
+   `write_story.py --observed`, defaulting to the top 5 but honoring an
+   explicit user-requested count such as 10;
 4. updates `INDEX.md` (handled by `write_story.py`).
 
 There are no plugin-shipped seed stories. Stories written during init are
