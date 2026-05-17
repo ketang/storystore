@@ -236,8 +236,9 @@ placeholder.
 ### stories-init
 
 Two-phase as described above. Idempotent. Never overwrites existing files.
-Phase 1 returns JSON. Phase 2 runs only on fresh init and writes the top 5
-observed-mode stories with real prose.
+Phase 1 returns JSON. Phase 2 runs only on fresh init and writes observed-mode
+stories with real prose, defaulting to the top 5 and honoring an explicit
+user-requested count such as 10.
 
 ### stories-generate
 

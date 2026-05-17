@@ -15,8 +15,11 @@ Phase 1 (mechanical, `init.py`): create `docs/stories/`, write a 3-sentence
 means `fresh_init: false`.
 
 Phase 2 (LLM-driven, fresh-init only): invoke `list_candidates.py`, pick
-the top user-invoked surfaces, and write 5 observed-mode stories with
-real prose via `write_story.py --observed`.
+the top user-invoked surfaces, and write observed-mode stories with real
+prose via `write_story.py --observed`. Default initial seeding writes 5
+stories. If the user explicitly requests a different count (for example,
+10 stories), honor that count as the observed-mode limit and continue to
+apply the same selection criteria.
 
 **Status:** Implementation deferred to Plan 1. See `spec.md` and
 `2026-05-01-storystore-plan-1-foundation.md` for the full contract.
