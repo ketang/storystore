@@ -119,10 +119,13 @@ Phase 2 is LLM-driven and lives in SKILL.md. It runs only when
 1. invokes `list_candidates.py`;
 2. applies the SKILL.md selection criteria (user-invoked surfaces, distinct
    workflows, non-trivial intent);
-3. writes observed-mode stories with real LLM-authored prose via
+3. drafts observed-mode stories with real LLM-authored prose;
+4. runs the Draft Story Evaluation quality gate with a context-free evaluator
+   subagent when supported;
+5. writes passing or explicitly retained observed-mode stories via
    `write_story.py --observed`, defaulting to the top 5 but honoring an
    explicit user-requested count such as 10;
-4. updates `INDEX.md` (handled by `write_story.py`).
+6. updates `INDEX.md` (handled by `write_story.py`).
 
 There are no plugin-shipped seed stories. Stories written during init are
 indistinguishable from any other observed-mode story.
@@ -184,6 +187,54 @@ Two modes:
 The bar for a valid story is low: frontmatter + Intent. Everything else is
 optional. The eliminated B8 "half-finished interview state" no longer exists
 because there is no half-finished — only thin.
+
+### Draft Story Evaluation Gate
+
+Independent review is a critical quality gate for drafted stories. Before
+writing, promoting, or presenting a generated story as ready, the authoring
+agent launches a context-free evaluator subagent when the runtime supports
+subagents. The evaluator must not inherit the parent conversation or drafting
+rationale; it receives only the draft story, relevant candidate/evidence
+snippets, existing story slugs/titles, and the storystore schema/editorial
+rules.
+
+If launching the subagent requires user permission, the agent asks eagerly and
+explicitly:
+
+```text
+Independent story review is a required storystore quality gate. May I launch a
+context-free evaluator subagent with only the draft story and evidence packet?
+```
+
+If the user declines, or the runtime cannot launch a context-free evaluator,
+the story may still be written as `status: draft`, but the agent must report
+that it is unevaluated and must not recommend promotion to `active`.
+
+Evaluator output:
+
+```json
+{
+  "verdict": "pass | revise | reject",
+  "promotion_recommendation": "keep_draft | ready_for_active | needs_human_acceptance",
+  "confidence": "low | medium | high",
+  "findings": [
+    {
+      "severity": "blocker | major | minor",
+      "kind": "intent-vague | scope-too-broad | implementation-led | claim-not-auditable | evidence-overreach | authority-mismatch | boundary-weak | duplicate-risk",
+      "section": "Intent",
+      "issue": "What is wrong.",
+      "suggested_fix": "Small, concrete repair.",
+      "requires_human": false
+    }
+  ]
+}
+```
+
+`pass` can be written as draft. `revise` should be addressed once and reviewed
+again when feasible. `reject` should not be written unless the user explicitly
+asks to keep the draft. Promotion to `active` requires a clean independent
+review with no blocker or major findings, no placeholder Intent, sufficient
+claims/evidence for scope, and no unresolved human-intent questions.
 
 After writing a story, `write_story.py` regenerates `INDEX.md` (wholesale
 overwrite).
@@ -372,6 +423,9 @@ rm -rf "$TMPDIR"
 - Init is two-phase, idempotent, and returns `fresh_init`.
 - Generation supports `--interview` and `--observed`; observed-mode produces
   real LLM prose.
+- Drafted stories run through the independent Draft Story Evaluation quality
+  gate when supported, and missing review blocks `active` promotion
+  recommendations.
 - Validity matrix and slug rules are enforced.
 - `intent-stories` prototype is removed.
 - Tests and build pass.
