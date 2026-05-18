@@ -47,20 +47,24 @@ scripts/build-plugin -v       # print each output path
 
 ## Install For Codex
 
-From a checkout:
-
-```bash
-scripts/install-codex-plugin
-```
-
-Or directly from GitHub:
+Install Storystore for Codex from the public GitHub-hosted installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ketang/storystore/main/scripts/install-codex-plugin | bash
 ```
 
-Use `bash -s -- --help` after the pipe to see installer options, including
-`--skip-register`, `--codex-home`, and `--marketplace-root`.
+Do not install Storystore from a local repository checkout. The public
+installer path is the supported installation method because it exercises the
+same downloaded payload users receive and avoids stale local build artifacts.
+
+To pass installer options, use `bash -s --` after the pipe:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ketang/storystore/main/scripts/install-codex-plugin | bash -s -- --help
+```
+
+Useful public-install options include `--skip-register`, `--codex-home`, and
+`--marketplace-root`.
 
 ## Status
 

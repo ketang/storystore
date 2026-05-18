@@ -28,11 +28,9 @@ usage() {
 Install the Storystore Codex plugin into a local Codex marketplace.
 
 Usage:
-  scripts/install-codex-plugin [options]
   curl -fsSL https://raw.githubusercontent.com/ketang/storystore/main/scripts/install-codex-plugin | bash
 
 Options:
-  --source <path>                 Install from a local Storystore checkout.
   --repo-url <url>                GitHub repository URL for curl installs.
   --ref <ref>                     Git ref to download when no source checkout is available.
   --codex-home <path>             Codex home to register against.
@@ -41,7 +39,6 @@ Options:
   --install-policy <policy>       AVAILABLE, INSTALLED_BY_DEFAULT, or NOT_AVAILABLE.
   --authentication-policy <policy> ON_INSTALL or ON_USE.
   --build                         Run scripts/build-plugin before installing.
-  --skip-build                    Do not run scripts/build-plugin.
   --skip-register                 Write files but do not run codex plugin marketplace add.
   --dry-run                       Print the plan without writing files.
   -v, --verbose                   Print major installation steps.
@@ -52,6 +49,10 @@ Environment:
   CODEX               Codex executable.
   STORYSTORE_REPO_URL Repository URL for curl installs.
   STORYSTORE_REF      Git ref for curl installs.
+
+Development/testing only:
+  --source <path>                 Install from a local checkout for tests.
+  --skip-build                    Do not run scripts/build-plugin.
 USAGE
 }
 
