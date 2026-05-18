@@ -8,6 +8,7 @@ DEFAULT_REPO_URL="https://github.com/ketang/storystore"
 DEFAULT_REF="main"
 DEFAULT_INSTALL_POLICY="INSTALLED_BY_DEFAULT"
 DEFAULT_AUTH_POLICY="ON_INSTALL"
+CACHE_REVISION="local"
 
 source_dir=""
 codex_home="${CODEX_HOME:-$HOME/.codex}"
@@ -289,6 +290,26 @@ install_payload() {
   mv "$temporary_target" "$plugin_target"
 }
 
+install_cache_payload() {
+  local cache_parent cache_target temporary_target
+  cache_parent="$codex_home/plugins/cache/$PLUGIN_NAME/$PLUGIN_NAME"
+  cache_target="$cache_parent/$CACHE_REVISION"
+  temporary_target="$cache_parent/.$CACHE_REVISION.installing"
+
+  mkdir -p "$cache_parent"
+  rm -rf "$temporary_target"
+  mkdir -p "$temporary_target"
+  (
+    cd "$temporary_target"
+    copy_path_if_present ".codex-plugin"
+    copy_path_if_present "plugin-version.json"
+    copy_path_if_present "README.md"
+    copy_path_if_present "INSTALL.md"
+  )
+  rm -rf "$cache_target"
+  mv "$temporary_target" "$cache_target"
+}
+
 write_marketplace_manifest() {
   local manifest_path
   manifest_path="$marketplace_root/.agents/plugins/marketplace.json"
@@ -389,6 +410,7 @@ fi
 run_build_if_needed
 validate_source
 install_payload
+install_cache_payload
 write_marketplace_manifest
 
 if [ "$skip_register" -eq 1 ]; then
@@ -396,6 +418,7 @@ if [ "$skip_register" -eq 1 ]; then
 Installed Storystore Codex plugin files.
 Marketplace root: $marketplace_root
 Plugin root: $marketplace_root/plugins/$PLUGIN_NAME
+Plugin cache root: $codex_home/plugins/cache/$PLUGIN_NAME/$PLUGIN_NAME/$CACHE_REVISION
 Register later with: CODEX_HOME='$codex_home' $codex_bin plugin marketplace add '$marketplace_root'
 DONE
   exit 0
@@ -407,5 +430,6 @@ cat <<DONE
 Installed Storystore Codex plugin.
 Marketplace root: $marketplace_root
 Plugin root: $marketplace_root/plugins/$PLUGIN_NAME
+Plugin cache root: $codex_home/plugins/cache/$PLUGIN_NAME/$PLUGIN_NAME/$CACHE_REVISION
 Restart any running Codex session to load the plugin.
 DONE

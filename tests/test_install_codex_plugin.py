@@ -86,10 +86,13 @@ def test_installer_writes_local_marketplace(tmp_path: Path) -> None:
     source.mkdir()
     create_source_tree(source)
     marketplace = tmp_path / "marketplace"
+    codex_home = tmp_path / "codex-home"
 
     result = run_installer(
         "--source",
         str(source),
+        "--codex-home",
+        str(codex_home),
         "--marketplace-root",
         str(marketplace),
         "--skip-build",
@@ -121,6 +124,34 @@ def test_installer_writes_local_marketplace(tmp_path: Path) -> None:
         "authentication": "ON_INSTALL",
     }
     assert plugin_entry["category"] == "Documentation"
+
+
+def test_installer_writes_codex_plugin_cache(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    create_source_tree(source)
+    marketplace = tmp_path / "marketplace"
+    codex_home = tmp_path / "codex-home"
+
+    result = run_installer(
+        "--source",
+        str(source),
+        "--codex-home",
+        str(codex_home),
+        "--marketplace-root",
+        str(marketplace),
+        "--skip-build",
+        "--skip-register",
+    )
+
+    assert result.returncode == 0, result.stderr
+    cache_root = codex_home / "plugins" / "cache" / "storystore" / "storystore"
+    assert cache_root.is_dir()
+    cache_entries = list(cache_root.iterdir())
+    assert len(cache_entries) == 1
+    cached_plugin = cache_entries[0]
+    assert (cached_plugin / ".codex-plugin" / "plugin.json").is_file()
+    assert (cached_plugin / ".codex-plugin" / "skills" / "stories-init" / "SKILL.md").is_file()
 
 
 def test_installer_enables_plugin_when_registered(tmp_path: Path) -> None:
