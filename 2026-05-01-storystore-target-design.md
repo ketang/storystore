@@ -231,6 +231,62 @@ Inferred from code; not human-confirmed.
 Coverage reports surface a one-line note listing slugs that still carry this
 placeholder.
 
+## Draft Story Evaluation
+
+Drafted stories receive an independent editorial review before the authoring
+agent presents them as ready or recommends promotion to `active`.
+
+The review is LLM-driven and context-free. The evaluator must not inherit the
+parent conversation, drafting rationale, or unstated product intent. It
+receives only a bounded review packet: draft story content, relevant candidate
+metadata and evidence snippets, existing story slugs/titles, and the
+storystore schema plus editorial rubric.
+
+Independent review is a critical quality gate. When the runtime supports
+subagents, the authoring agent launches a separate evaluator subagent. If
+launching that subagent requires user permission, the agent asks eagerly and
+explicitly:
+
+```text
+Independent story review is a required storystore quality gate. May I launch a
+context-free evaluator subagent with only the draft story and evidence packet?
+```
+
+If permission is declined, or the runtime cannot launch a context-free
+evaluator, the story may still be written as `status: draft`, but the agent
+must report that independent review was skipped and must not recommend
+promotion to `active`.
+
+The evaluator is read-only and advisory. It emits:
+
+```json
+{
+  "verdict": "pass | revise | reject",
+  "promotion_recommendation": "keep_draft | ready_for_active | needs_human_acceptance",
+  "confidence": "low | medium | high",
+  "findings": [
+    {
+      "severity": "blocker | major | minor",
+      "kind": "intent-vague | scope-too-broad | implementation-led | claim-not-auditable | evidence-overreach | authority-mismatch | boundary-weak | duplicate-risk",
+      "section": "Intent",
+      "issue": "What is wrong.",
+      "suggested_fix": "Small, concrete repair.",
+      "requires_human": false
+    }
+  ]
+}
+```
+
+The editorial rubric checks that Intent is user-centered, scope maps to one
+durable user-facing capability, prose is specific, expected behavior is
+observable, boundaries are meaningful, claims are auditable, evidence is
+relevant without overclaiming, and metadata follows storystore policy.
+
+Promotion to `active` requires a clean independent review: no blocker or major
+findings, no placeholder Intent, sufficient claims/evidence for scope, and no
+unresolved human-intent questions. The evaluator's recommendation is not
+itself authority; human acceptance is still required for `authority: accepted`.
+
 ## Skill Responsibilities
 
 ### stories-init
@@ -239,6 +295,10 @@ Two-phase as described above. Idempotent. Never overwrites existing files.
 Phase 1 returns JSON. Phase 2 runs only on fresh init and writes observed-mode
 stories with real prose, defaulting to the top 5 and honoring an explicit
 user-requested count such as 10.
+
+Before writing each seeded story, the agent runs the Draft Story Evaluation
+quality gate. If independent review cannot run or is declined, seeded stories
+remain drafts and are reported as unevaluated.
 
 ### stories-generate
 
@@ -254,6 +314,13 @@ Two modes, both LLM-driven:
 
 The bar for a valid story is low: frontmatter + Intent. Everything else is
 optional and tooling does what it can with what is present.
+
+Before writing a generated story, the agent runs the Draft Story Evaluation
+quality gate. A `pass` verdict can be written directly as draft. A `revise`
+verdict should be addressed once and reviewed again when feasible. A `reject`
+verdict should not be written unless the user explicitly asks to keep the
+draft. No generated story is recommended for `active` without clean
+independent review.
 
 ### stories-audit
 

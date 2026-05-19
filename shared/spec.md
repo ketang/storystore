@@ -131,6 +131,80 @@ Inferred from code; not human-confirmed.
 
 Coverage reports list slugs still carrying this placeholder.
 
+## Draft Story Evaluation
+
+Drafted stories must receive independent editorial review before they are
+presented as ready or promoted to `active`.
+
+The review is an LLM-driven, context-free pass run after the authoring agent
+drafts a story and before the story is written or recommended for promotion.
+"Context-free" means the evaluator must not inherit the parent conversation,
+the drafting rationale, or unstated product intent. The evaluator receives
+only a bounded review packet:
+
+- the draft story content;
+- candidate metadata and deterministic evidence snippets relevant to the
+  draft;
+- existing story slugs and titles for duplicate-risk checks;
+- the storystore schema and editorial rules.
+
+Independent review is a critical quality gate. When the runtime supports
+subagents, the authoring agent should launch a separate evaluator subagent. If
+launching that subagent requires user permission, the agent should ask eagerly
+and explicitly instead of silently skipping review:
+
+```text
+Independent story review is a required storystore quality gate. May I launch a
+context-free evaluator subagent with only the draft story and evidence packet?
+```
+
+If the user declines, or the runtime cannot launch a context-free evaluator,
+the story may still be written as `status: draft`, but the agent must report
+that the story is unevaluated and must not recommend promotion to `active`.
+
+The evaluator is read-only and advisory. It must not edit files, rewrite the
+story wholesale, or treat code/tests as automatic authority for accepted
+intent. It emits a structured verdict:
+
+```json
+{
+  "verdict": "pass | revise | reject",
+  "promotion_recommendation": "keep_draft | ready_for_active | needs_human_acceptance",
+  "confidence": "low | medium | high",
+  "findings": [
+    {
+      "severity": "blocker | major | minor",
+      "kind": "intent-vague | scope-too-broad | implementation-led | claim-not-auditable | evidence-overreach | authority-mismatch | boundary-weak | duplicate-risk",
+      "section": "Intent",
+      "issue": "What is wrong.",
+      "suggested_fix": "Small, concrete repair.",
+      "requires_human": false
+    }
+  ]
+}
+```
+
+The editorial rubric checks:
+
+- `Intent`: one clear user-centered reason the capability exists; not a
+  component summary, endpoint summary, or implementation fact.
+- `Scope`: one durable user-facing capability or workflow; neither too broad
+  nor a tiny code path.
+- `Story`: plain prose explaining user need and workflow without marketing
+  filler or hidden requirements.
+- `Expected Behavior`: visible outcomes the user can observe.
+- `Boundaries`: meaningful exclusions, not a generic disclaimer.
+- `Auditable Claims`: concrete, checkable, one claim per bullet.
+- `Evidence`: relevant refs without evidence inflation or overclaiming.
+- `Metadata`: `authority`, `status`, `change_resistance`,
+  `tests_applicable`, and locked sections follow storystore policy.
+
+Promotion to `active` requires a clean independent review: no blocker or major
+findings, no placeholder Intent, sufficient claims/evidence for the story's
+scope, and no unresolved human-intent questions. The evaluator may recommend
+promotion, but the recommendation is not itself authority; human acceptance is
+still required for `authority: accepted`.
+
 ## Authority And Change Resistance
 
 Two independent axes.
