@@ -5,36 +5,67 @@ description: Initialize docs/stories/ for a repository — create the directory,
 
 # stories-init
 
-Two-phase initialization for the storystore convention.
+Initialize `docs/stories/` in two phases, while following the target repo's
+work conventions.
 
-Phase 1 (mechanical, `init.py`): create `docs/stories/`, write a 3-sentence
-`README.md` stub when absent, write an empty `INDEX.md`, append
-`drift-todo.md` to `.gitignore`, detect root-level agent-instruction files
-(`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`), and return JSON including
-`fresh_init: true | false`. Idempotent: any pre-existing `docs/stories/`
-means `fresh_init: false`.
+## Before Writing
 
-Phase 2 (LLM-driven, fresh-init only): invoke `list_candidates.py`, pick
-the top user-invoked surfaces, draft observed-mode stories with real prose,
-run the independent Draft Story Evaluation quality gate, and write passing
-or explicitly retained drafts via `write_story.py --observed`. Default
-initial seeding writes 5 stories. If the user explicitly requests a different
-count (for example, 10 stories), honor that count as the observed-mode limit
-and continue to apply the same selection criteria.
+- Read local instructions: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, README, and
+  any documented contribution flow.
+- Use the repo's required branch/worktree flow. If none is documented, use a
+  dedicated feature branch in a linked worktree outside the repo.
+- If the repo uses an issue tracker with claim semantics, find or create the
+  relevant issue and claim it before edits.
+- Note the verification command before changing files.
 
-Independent review is a critical quality gate. When the runtime supports
-subagents, launch a context-free evaluator subagent for each drafted story
-before writing it. If launching that subagent requires user permission, ask
-eagerly and explicitly:
+## Phase 1
 
-```text
-Independent story review is a required storystore quality gate. May I launch a
-context-free evaluator subagent with only the draft story and evidence packet?
+Run:
+
+```bash
+stories-init/scripts/init.py --repo-root <repo-root>
 ```
 
-If independent review cannot run or is declined, any retained seeded stories
-must remain `status: draft`, be reported as unevaluated, and must not be
-recommended for promotion to `active`.
+The script creates missing `docs/stories/` scaffolding, appends
+`docs/stories/drift-todo.md` to `.gitignore`, detects root agent-instruction
+files, and returns JSON including `fresh_init`.
+
+If `docs/stories/` already existed, treat `fresh_init: false`: fill missing
+mechanical files only and do not seed stories.
+
+## Phase 2
+
+Run only when `fresh_init: true`:
+
+1. Invoke `list_candidates.py`.
+2. Pick distinct, user-invoked, non-trivial workflows.
+3. Draft observed-mode stories.
+4. Run the independent Draft Story Evaluation gate for each draft when
+   subagents are available.
+5. Write passing or explicitly retained drafts with `write_story.py --observed`.
+6. Seed 5 stories by default, or the count the user explicitly requested.
+
+If independent review cannot run or is declined, retained seeded stories must
+stay `status: draft` and be reported as unevaluated.
+
+## Follow-Up
+
+After fresh init, offer this pointer for detected agent-instruction files, but
+edit them only with explicit user approval:
+
+```markdown
+- This repo uses intent stories under `docs/stories/`. Before making behavioral
+  changes to user-facing functionality, run `stories-impact-check`.
+```
+
+Record follow-up work in the repo tracker. Use `docs/stories/drift-todo.md`
+only for story/software drift notes.
+
+## Finish
+
+Review the diff, rebuild generated plugin/docs outputs when the repo tracks
+them, run the selected verification command, and report the branch/worktree,
+tracker item, and verification result.
 
 **Status:** Implementation deferred to Plan 1. See `spec.md` and
-`2026-05-01-storystore-plan-1-foundation.md` for the full contract.
+`2026-05-01-storystore-plan-1-foundation.md` for the full script contract.
