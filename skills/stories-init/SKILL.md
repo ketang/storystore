@@ -39,9 +39,18 @@ Run only when `fresh_init: true`:
 
 1. Invoke `list_candidates.py`.
 2. Pick distinct, user-invoked, non-trivial workflows.
-3. Draft observed-mode stories.
+3. Draft observed-mode stories. For each candidate, inspect deterministic
+   evidence for non-happy-path behavior as well as the happy path. Look in
+   tests, validation code, error-handling branches, and documented error
+   responses for: validation errors, missing inputs, empty states,
+   permission/auth failures, unsupported formats, timeout or network
+   failures, idempotency behavior, and fallback paths. Capture observable
+   failure behavior in `Expected Behavior` and known edge cases or
+   exclusions in `Boundaries`. Do not invent failure modes that the
+   evidence does not support; if no negative-path evidence exists, omit
+   it rather than fabricating it.
 4. Run the independent Draft Story Evaluation gate for each draft when
-   subagents are available.
+   subagents are available. The evaluator checks negative-path coverage.
 5. Write passing or explicitly retained drafts with `write_story.py --observed`.
 6. Seed 5 stories by default, or the count the user explicitly requested.
 

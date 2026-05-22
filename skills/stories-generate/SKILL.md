@@ -21,6 +21,30 @@ enforced at write: `authority: observed` cannot have `change_resistance:
 high | immutable` (exit 3). The script refuses to overwrite an existing
 story file (exit 2). After write, regenerates `INDEX.md`.
 
+## Edge Cases And Failure Modes
+
+In both modes, prompt for or infer meaningful edge cases and failure modes
+and place them in `Expected Behavior` and/or `Boundaries`:
+
+- **Interview mode**: ask the user what happens when things go wrong —
+  validation errors, missing inputs, empty states, permission/auth
+  failures, unsupported formats, timeout or network failures, idempotency
+  behavior, fallback paths. Ask about edge cases the workflow can hit
+  (size limits, locale/encoding, partial inputs, concurrent edits) and
+  explicit non-promises. Record observable failure behavior in `Expected
+  Behavior` and exclusions or known non-promises in `Boundaries`.
+- **Observed mode**: inspect deterministic evidence (tests asserting
+  error paths, validation code, error-handling branches, documented error
+  responses) for the same categories. Capture only failure behavior that
+  the evidence supports.
+
+Do not invent failure modes the user has not accepted or the evidence does
+not support. Sparse drafts are still allowed (frontmatter + Intent), but
+high-quality drafts should mention meaningful negative-path behavior when
+it is known or inferable. The independent evaluator gate checks for this
+coverage and may emit `boundary-weak` findings when obvious edge cases or
+failure modes are omitted.
+
 ## Independent Draft Evaluation
 
 Independent review is a critical quality gate. Before writing, promoting, or
