@@ -87,7 +87,7 @@ def test_materialization_covers_all_packaging_json_skills(tmp_path):
 
 def test_skills_without_packaging_json_unaffected(tmp_path):
     out = setup_build(tmp_path)
-    for skill in ("stories-init", "stories-generate", "stories-update", "stories-impact-check"):
+    for skill in ("stories-init", "stories-update", "stories-impact-check"):
         scripts = out / "skills" / skill / "scripts"
         assert not (scripts / "storystore_lib.py").exists(), f"{skill}: unexpected storystore_lib.py"
 
