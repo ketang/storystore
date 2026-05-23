@@ -1,5 +1,7 @@
 {
   "shared_scripts": [
+    "inventory.py",
+    "list_candidates.py",
     "write_story.py",
     "storystore_lib.py"
   ]
