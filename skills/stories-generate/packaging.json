@@ -1,0 +1,6 @@
+{
+  "shared_scripts": [
+    "write_story.py",
+    "storystore_lib.py"
+  ]
+}
