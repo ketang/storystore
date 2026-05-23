@@ -78,7 +78,7 @@ def test_shared_files_content_matches_source(tmp_path):
 
 def test_materialization_covers_all_packaging_json_skills(tmp_path):
     out = setup_build(tmp_path)
-    for skill in ("stories-audit", "stories-coverage"):
+    for skill in ("stories-audit", "stories-coverage", "stories-impact-check"):
         scripts = out / "skills" / skill / "scripts"
         assert (scripts / "storystore_lib.py").exists(), f"{skill}: storystore_lib.py missing"
         assert (scripts / "inventory.py").exists(), f"{skill}: inventory.py missing"
@@ -87,7 +87,7 @@ def test_materialization_covers_all_packaging_json_skills(tmp_path):
 
 def test_skills_without_packaging_json_unaffected(tmp_path):
     out = setup_build(tmp_path)
-    for skill in ("stories-init", "stories-update", "stories-impact-check"):
+    for skill in ("stories-init", "stories-update"):
         scripts = out / "skills" / skill / "scripts"
         assert not (scripts / "storystore_lib.py").exists(), f"{skill}: unexpected storystore_lib.py"
 
@@ -98,7 +98,7 @@ def test_skills_without_packaging_json_unaffected(tmp_path):
 
 def test_shared_py_files_materialized_into_codex_skill_dir(tmp_path):
     out = setup_build(tmp_path)
-    for skill in ("stories-audit", "stories-coverage"):
+    for skill in ("stories-audit", "stories-coverage", "stories-impact-check"):
         scripts = out / ".codex-plugin" / "skills" / skill / "scripts"
         assert (scripts / "storystore_lib.py").exists(), f"{skill}: storystore_lib.py missing from Codex output"
         assert (scripts / "inventory.py").exists(), f"{skill}: inventory.py missing from Codex output"
@@ -106,7 +106,7 @@ def test_shared_py_files_materialized_into_codex_skill_dir(tmp_path):
 
 def test_shared_md_files_materialized_into_codex_references_dir(tmp_path):
     out = setup_build(tmp_path)
-    for skill in ("stories-audit", "stories-coverage"):
+    for skill in ("stories-audit", "stories-coverage", "stories-impact-check"):
         refs = out / ".codex-plugin" / "skills" / skill / "references"
         assert (refs / "spec.md").exists(), f"{skill}: spec.md missing from Codex references/"
 
