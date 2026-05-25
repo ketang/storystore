@@ -79,6 +79,24 @@ HEADING_DOC_NAMES: frozenset[str] = frozenset({"README.md", "DESIGN.md", "ARCHIT
 
 HTTP_METHODS: tuple[str, ...] = ("get", "post", "put", "patch", "delete", "head", "options", "all")
 
+# Migration file patterns to search for schema evidence resolution.
+MIGRATION_GLOB_PATTERNS: tuple[str, ...] = (
+    "db/migrate/*.rb",
+    "db/migrate/**/*.rb",
+    "migrations/*.sql",
+    "migrations/**/*.sql",
+    "db/migrations/*.sql",
+    "db/migrations/**/*.sql",
+    "*/migrations/*.py",
+    "*/migrations/**/*.py",
+    "alembic/versions/*.py",
+    "alembic/versions/**/*.py",
+    "prisma/migrations/**/*.sql",
+)
+
+# Regex for validating a schema ref: table.column
+_SCHEMA_REF_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$")
+
 
 # --------------------------------------------------------------------------- #
 # Regexes
@@ -338,6 +356,8 @@ def _validate_surface_ref(ref: str) -> bool:
         return bool(rest)
     if prefix in ("test", "heading", "doc"):
         return bool(rest)
+    if prefix == "schema":
+        return bool(_SCHEMA_REF_RE.match(rest))
     # Unknown prefix.
     return False
 
@@ -360,6 +380,90 @@ def _resolve_test_ref(repo_root: Path, ref: str) -> list[str]:
         return []
     matches = sorted(p.relative_to(repo_root).as_posix() for p in repo_root.glob(ref) if p.is_file())
     return matches
+
+
+def _find_migration_files(repo_root: Path) -> list[Path]:
+    """Discover migration files under ``repo_root`` using known patterns."""
+    seen: set[Path] = set()
+    results: list[Path] = []
+    for pattern in MIGRATION_GLOB_PATTERNS:
+        for p in repo_root.glob(pattern):
+            if p.is_file() and p not in seen:
+                seen.add(p)
+                results.append(p)
+    results.sort()
+    return results
+
+
+def _resolve_schema_ref(
+    repo_root: Path, ref: str, migration_files: Optional[list[Path]] = None
+) -> Optional[dict[str, Any]]:
+    """Resolve a single ``schema:<table>.<column>`` ref against migrations.
+
+    Returns ``{"file": "<relative path>", "line": <1-based>}`` for the most
+    recent migration that defines or alters the column, or ``None`` when not
+    found.
+    """
+    ref = ref.strip()
+    if not _SCHEMA_REF_RE.match(ref):
+        return None
+
+    table, column = ref.split(".", 1)
+
+    if migration_files is None:
+        migration_files = _find_migration_files(repo_root)
+
+    # Build patterns to search for in migration files.
+    # We look for the column name in the context of the table name.
+    # Common patterns across frameworks:
+    #   SQL:   CREATE TABLE users (... email ...); ALTER TABLE users ADD COLUMN email
+    #   Rails: create_table :users ... t.string :email; add_column :users, :email
+    #   Django/Alembic: table references with column names
+    table_lower = table.lower()
+    column_lower = column.lower()
+
+    best_match: Optional[dict[str, Any]] = None
+
+    for mig_path in migration_files:
+        try:
+            text = mig_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        text_lower = text.lower()
+        # Quick check: both table and column must appear in the file.
+        if table_lower not in text_lower or column_lower not in text_lower:
+            continue
+
+        # Scan line by line for column references in the context of the table.
+        lines = text.splitlines()
+        in_table_context = False
+        last_match_line: Optional[int] = None
+
+        for i, line in enumerate(lines):
+            ll = line.lower().strip()
+
+            # Detect table context.
+            if table_lower in ll:
+                in_table_context = True
+
+            # Look for column in a table context.
+            if in_table_context and column_lower in ll:
+                last_match_line = i + 1  # 1-based
+
+            # Reset context on blank lines or end-of-statement in SQL.
+            if not ll or ll == "end" or ll.endswith(";"):
+                if last_match_line is not None:
+                    # Keep the match; context resets but we found something.
+                    pass
+                in_table_context = False
+
+        if last_match_line is not None:
+            rel = mig_path.relative_to(repo_root).as_posix()
+            best_match = {"file": rel, "line": last_match_line}
+            # Continue to find the most recent (last in sorted order).
+
+    return best_match
 
 
 def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
@@ -399,12 +503,33 @@ def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
         else:
             docs_missing.append(ref)
 
+    # Schema evidence resolution.
+    schema_resolved: list[dict[str, Any]] = []
+    schema_missing: list[str] = []
+    schema_refs_raw = getattr(story, "evidence_schema", []) or []
+    if schema_refs_raw:
+        migration_files = _find_migration_files(repo_root)
+        for ref in schema_refs_raw:
+            ref = ref.strip()
+            if not ref:
+                continue
+            if not _SCHEMA_REF_RE.match(ref):
+                schema_missing.append(ref)
+                continue
+            result = _resolve_schema_ref(repo_root, ref, migration_files)
+            if result is not None:
+                schema_resolved.append({"ref": ref, **result})
+            else:
+                schema_missing.append(ref)
+
     return {
         "tests_resolved": tests_resolved,
         "tests_missing": tests_missing,
         "surface_refs": surface_refs,
         "docs_resolved": docs_resolved,
         "docs_missing": docs_missing,
+        "schema_resolved": schema_resolved,
+        "schema_missing": schema_missing,
     }
 
 

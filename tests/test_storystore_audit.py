@@ -406,6 +406,85 @@ This is doc-only.
     assert not _findings_of_kind(report, "test-evidence-missing"), report
 
 
+def test_schema_evidence_missing_when_ref_does_not_resolve(tmp_path):
+    """schema-evidence-missing finding is emitted for unresolvable schema refs."""
+    repo = _init_repo(tmp_path)
+    stories_dir = repo / "docs" / "stories"
+    stories_dir.mkdir(parents=True, exist_ok=True)
+    (stories_dir / "user-schema.md").write_text(
+        """\
+---
+title: User Schema
+slug: user-schema
+status: active
+authority: accepted
+change_resistance: medium
+---
+
+# User Schema
+
+## Intent
+Track user email in the database.
+
+## Auditable Claims
+- The users table has an email column.
+
+## Evidence
+### Schema
+- `users.email`
+""",
+        encoding="utf-8",
+    )
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["findings_count"] >= 1
+    report = (repo / "audit.md").read_text()
+    assert _findings_of_kind(report, "schema-evidence-missing"), report
+
+
+def test_schema_evidence_resolved_no_finding(tmp_path):
+    """No schema-evidence-missing when migration defines the column."""
+    repo = _init_repo(tmp_path)
+    # Create a migration file.
+    mig_dir = repo / "migrations"
+    mig_dir.mkdir()
+    (mig_dir / "001_create_users.sql").write_text(
+        "CREATE TABLE users (\n  id INTEGER PRIMARY KEY,\n  email VARCHAR(255)\n);\n",
+        encoding="utf-8",
+    )
+    stories_dir = repo / "docs" / "stories"
+    stories_dir.mkdir(parents=True, exist_ok=True)
+    (stories_dir / "user-schema.md").write_text(
+        """\
+---
+title: User Schema
+slug: user-schema
+status: active
+authority: accepted
+change_resistance: medium
+---
+
+# User Schema
+
+## Intent
+Track user email in the database.
+
+## Auditable Claims
+- The users table has an email column.
+
+## Evidence
+### Schema
+- `users.email`
+""",
+        encoding="utf-8",
+    )
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr
+    report = (repo / "audit.md").read_text()
+    assert not _findings_of_kind(report, "schema-evidence-missing"), report
+
+
 def test_perf_warn_threshold_zero_disables(tmp_path):
     """STORYSTORE_PERF_WARN_MS=0 disables the threshold warning."""
     repo = _init_repo(tmp_path)
