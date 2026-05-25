@@ -5,57 +5,214 @@ description: Author a new intent story in either interview mode (authority=accep
 
 # stories-generate
 
-Two modes:
+Author a new intent story for the target repository. Two modes:
 
-- `--interview`: writes `authority: accepted` after a short human
-  interview. Defaults: `status=draft`, `change_resistance=medium`,
-  `locked_sections=[Intent]`.
-- `--observed`: writes `authority: observed` from the deterministic
-  candidate list (`list_candidates.py`), with real LLM-authored prose.
-  Defaults: `status=draft`, `change_resistance=low`, `locked_sections=[]`.
-  Default initial run produces 5 stories; `--limit N` overrides; re-runs
-  subtract already-authored slugs.
+- `--interview`: short human interview, writes `authority: accepted`.
+- `--observed`: derives candidates from the deterministic scanner, LLM
+  authors prose, writes `authority: observed`.
 
-The bar for a valid story is frontmatter + Intent. Validity matrix is
-enforced at write: `authority: observed` cannot have `change_resistance:
-high | immutable` (exit 3). The script refuses to overwrite an existing
-story file (exit 2). After write, regenerates `INDEX.md`.
+The bar for a valid story is low — frontmatter plus `Intent`. Everything
+else is optional. Sparse drafts are allowed.
 
-## Independent Draft Evaluation
+## Before Writing
 
-Independent review is a critical quality gate. Before writing, promoting, or
-presenting a drafted story as ready, launch a context-free evaluator subagent
-when the runtime supports subagents.
+- Read local instructions: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, README,
+  and any documented contribution flow.
+- Use the repo's required branch/worktree flow. If none is documented, use
+  a dedicated feature branch in a linked worktree outside the repo.
+- If the repo uses an issue tracker with claim semantics, claim the
+  relevant issue before edits.
 
-The evaluator must not inherit this conversation, the drafting rationale, or
-unstated product intent. Pass only a bounded review packet:
+## Interview Mode
+
+Run with `--interview`. Conduct a short interview with the user:
+
+1. Title, slug (kebab-case, 2+ words), and 1–2 sentence Intent.
+2. The Story (who/what/why), Expected Behavior, and Boundaries.
+3. Auditable Claims and Evidence (`tests`, `surface`, `docs`).
+4. Edge cases and failure modes — ask the user what happens when things go
+   wrong: validation errors, missing inputs, empty states, permission/auth
+   failures, unsupported formats, timeout or network failures, idempotency
+   behavior, fallback paths. Ask about edge cases the workflow can hit
+   (size limits, locale/encoding, partial inputs, concurrent edits) and
+   explicit non-promises. Record observable failure behavior in
+   `Expected Behavior` and exclusions or known non-promises in
+   `Boundaries`. Do not invent failure modes the user has not accepted.
+
+Pipe the resulting JSON to `write_story.py --interview`.
+
+Interview defaults: `status=draft`, `authority=accepted`,
+`change_resistance=medium`, `locked_sections=[Intent]`.
+
+## Observed Mode
+
+Run with `--observed`. Default initial run produces 5 stories;
+`--limit N` overrides. Re-runs subtract already-authored slugs (the
+candidate scanner removes candidates already covered by an authored
+story).
+
+1. **Discover candidates.**
+
+   ```bash
+   shared/list_candidates.py --repo-root <repo-root>
+   ```
+
+   Output: `{"candidates": [{"kind", "name", "summary", "evidence": [...]}, ...]}`.
+   Already-authored slugs are subtracted by the scanner.
+
+2. **Select candidates.** Prefer user-invoked surfaces, distinct
+   workflows, and non-trivial intent. Skip purely structural or
+   build/lint/typecheck surfaces.
+
+3. **Draft observed-mode prose.** Inspect deterministic evidence (tests
+   asserting error paths, validation code, error-handling branches,
+   documented error responses) for the same edge-case and failure
+   categories listed under interview mode. Capture only failure behavior
+   that the evidence supports — do not fabricate.
+
+4. **Run the Draft Story Evaluation gate** (see below) before writing.
+
+5. **Write passing drafts** with `write_story.py --observed`.
+
+Observed defaults: `status=draft`, `authority=observed`,
+`change_resistance=low`, `locked_sections=[]`.
+
+## Draft Story Evaluation Gate
+
+Independent review is a critical quality gate. Before writing, promoting,
+or presenting a drafted story as ready, launch a context-free evaluator
+subagent when the runtime supports subagents.
+
+The evaluator must not inherit this conversation, the drafting rationale,
+or unstated product intent. Pass only a bounded review packet:
 
 - the draft story;
 - relevant candidate metadata and deterministic evidence snippets;
 - existing story slugs and titles;
-- the storystore schema and editorial rules.
+- the storystore schema and editorial rules (`shared/spec.md`).
 
-If launching a subagent requires user permission, ask eagerly and explicitly:
+If launching a subagent requires user permission, ask eagerly and
+explicitly:
 
 ```text
-Independent story review is a required storystore quality gate. May I launch a
-context-free evaluator subagent with only the draft story and evidence packet?
+Independent story review is a required storystore quality gate. May I
+launch a context-free evaluator subagent with only the draft story and
+evidence packet?
 ```
 
-If permission is declined, or the runtime cannot launch a context-free
-evaluator, the story may still be written as `status: draft`, but report that
-it is unevaluated and do not recommend promotion to `active`.
+Evaluator output:
 
-Evaluator verdicts:
+```json
+{
+  "verdict": "pass | revise | reject",
+  "promotion_recommendation": "keep_draft | ready_for_active | needs_human_acceptance",
+  "confidence": "low | medium | high",
+  "findings": [
+    {
+      "severity": "blocker | major | minor",
+      "kind": "intent-vague | scope-too-broad | implementation-led | claim-not-auditable | evidence-overreach | authority-mismatch | boundary-weak | duplicate-risk",
+      "section": "Intent",
+      "issue": "What is wrong.",
+      "suggested_fix": "Small, concrete repair.",
+      "requires_human": false
+    }
+  ]
+}
+```
+
+Verdict handling:
 
 - `pass`: write the story as draft.
 - `revise`: address targeted findings once and review again when feasible.
-- `reject`: do not write unless the user explicitly asks to keep the draft.
+- `reject`: do not write unless the user explicitly asks to keep the
+  draft.
 
-Promotion to `active` requires a clean independent review with no blocker or
-major findings, no placeholder Intent, sufficient claims/evidence for scope,
-and no unresolved human-intent questions. The evaluator is advisory; human
-acceptance is still required for `authority: accepted`.
+Promotion to `active` requires a clean independent review with no blocker
+or major findings, no placeholder Intent, sufficient claims/evidence for
+scope, and no unresolved human-intent questions. The evaluator is
+advisory; human acceptance is still required for `authority: accepted`.
 
-**Status:** Implementation deferred to Plan 1. See `spec.md` and
-`2026-05-01-storystore-plan-1-foundation.md` for the full contract.
+If permission is declined or the runtime cannot launch a context-free
+evaluator, the story may still be written as `status: draft`, but report
+that it is unevaluated and do not recommend promotion to `active`.
+
+The evaluator gate applies to both modes. In interview mode it
+specifically checks negative-path coverage and may emit `boundary-weak`
+findings when obvious edge cases or failure modes are omitted.
+
+## Script Contracts
+
+`list_candidates.py`:
+
+```bash
+shared/list_candidates.py --repo-root <repo-root>
+```
+
+Stdout JSON:
+
+```json
+{
+  "candidates": [
+    {
+      "kind": "cli-command",
+      "name": "login",
+      "summary": "CLI command login",
+      "evidence": ["src/cli.ts"]
+    }
+  ]
+}
+```
+
+Exit codes: `0` success; `2` invalid input. Candidates already covered by
+an authored story are subtracted from output.
+
+`write_story.py`:
+
+```bash
+shared/write_story.py --repo-root <repo-root> [--interview | --observed]
+```
+
+Stdin JSON (mode supplies defaults for any omitted optional fields):
+
+```json
+{
+  "schema_version": 1,
+  "title": "Authenticated Login",
+  "slug": "authenticated-login",
+  "status": "draft",
+  "authority": "accepted",
+  "change_resistance": "medium",
+  "locked_sections": ["Intent"],
+  "intent": "Users sign in so the system can attribute actions.",
+  "story": "A user signs in with credentials before using private commands.",
+  "expected_behavior": "Valid credentials establish an authenticated session.",
+  "boundaries": "Does not cover password reset.",
+  "auditable_claims": ["The login command exists."],
+  "evidence": {
+    "tests": ["tests/login.e2e.test.ts"],
+    "surface": ["cli: login"],
+    "docs": ["README.md"]
+  }
+}
+```
+
+Exit codes:
+
+- `0` success;
+- `2` invalid input (bad slug, overwrite refusal, JSON parse error,
+  missing required field, unknown mode);
+- `3` validity-matrix violation (`authority=observed` with
+  `change_resistance` in `{high, immutable}`).
+
+Slug rules: kebab-case ASCII; fewer than 2 words exits 2; 2–3 or 9+ words
+emit `STORYSTORE_SLUG_NAG: ...` on stderr and accept. Slugs are stable —
+never rename.
+
+`write_story.py` refuses to overwrite an existing story file (exit 2) and
+wholesale-regenerates `docs/stories/INDEX.md` after a successful write.
+
+## Finish
+
+Review the diff, rebuild generated plugin/docs outputs when the repo
+tracks them, run the selected verification command, and report the
+branch/worktree, tracker item, and verification result.

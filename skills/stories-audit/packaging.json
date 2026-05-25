@@ -1,5 +1,6 @@
 {
   "shared_scripts": [
+    "audit.py",
     "inventory.py",
     "spec.md",
     "storystore_lib.py"
