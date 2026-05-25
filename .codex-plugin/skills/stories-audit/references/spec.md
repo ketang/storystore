@@ -97,10 +97,18 @@ nag finding.
 Qualitative prose describing the user need and expected workflow.
 
 ## Expected Behavior
-What the software should visibly do.
+What the software should visibly do, covering both normal behavior and
+important observable failure behavior (validation errors, missing inputs,
+empty states, permission/auth failures, unsupported formats, timeout or
+network failures, idempotency behavior, fallback paths). Include only failure
+modes supported by deterministic evidence or explicit human acceptance; do
+not invent failure behavior.
 
 ## Boundaries
-What this story does not promise.
+Edge cases, exclusions, and known non-promises for this capability. Prefer
+concrete edge cases the user can hit (size limits, locale/encoding, partial
+inputs, concurrent edits) and explicit non-promises over generic
+disclaimers.
 
 ## Auditable Claims
 - Concrete claim that can be checked against tests, commands, docs, source,
@@ -120,7 +128,16 @@ Optional. Pointers to tracker issues or known unresolved mismatches.
 ```
 
 The bar to *create* a story is just frontmatter + Intent. Audit and coverage
-do what they can with what is present.
+do what they can with what is present. Sparse drafts remain allowed.
+
+A high-quality story should mention meaningful edge cases and failure modes
+when they are known from human acceptance or inferable from deterministic
+evidence (tests asserting error paths, validation code, documented error
+responses, fallback branches). Place them in `Expected Behavior` when the
+software is expected to handle them visibly, and in `Boundaries` when they
+are excluded or explicitly not promised. Do not invent edge cases or failure
+modes that evidence does not support; absence of evidence is not evidence of
+behavior.
 
 The canonical placeholder Intent for observed-mode stories that the agent
 could not infer is the literal string:
@@ -192,8 +209,20 @@ The editorial rubric checks:
   nor a tiny code path.
 - `Story`: plain prose explaining user need and workflow without marketing
   filler or hidden requirements.
-- `Expected Behavior`: visible outcomes the user can observe.
-- `Boundaries`: meaningful exclusions, not a generic disclaimer.
+- `Expected Behavior`: visible outcomes the user can observe, including
+  meaningful failure modes (validation errors, missing inputs, empty
+  states, permission/auth failures, unsupported formats, timeout or
+  network failures, idempotency, fallback paths) when evidence supports
+  them.
+- `Boundaries`: meaningful exclusions and concrete edge cases, not a
+  generic disclaimer. Should call out known non-promises and edge cases
+  evident from the supplied evidence.
+- `Negative-path coverage`: the story mentions meaningful edge cases or
+  failure modes evident from the evidence packet. Missing obvious
+  edge-case or failure-mode coverage is a `minor` finding when the gap is
+  peripheral and a `major` finding when the missing behavior is central
+  to the user-facing workflow. The `boundary-weak` finding kind covers
+  omitted edge cases and failure modes; no new kind is introduced.
 - `Auditable Claims`: concrete, checkable, one claim per bullet.
 - `Evidence`: relevant refs without evidence inflation or overclaiming.
 - `Metadata`: `authority`, `status`, `change_resistance`,

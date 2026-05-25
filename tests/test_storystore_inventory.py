@@ -317,6 +317,8 @@ def test_resolve_evidence_handles_empty_story(tmp_path):
         "surface_refs": [],
         "docs_resolved": [],
         "docs_missing": [],
+        "schema_resolved": [],
+        "schema_missing": [],
     }
 
 
@@ -354,3 +356,125 @@ Users can log in.
     assert out["tests_resolved"] == ["tests/login.spec.ts"]
     assert out["docs_resolved"] == ["README.md"]
     assert out["surface_refs"] == [{"ref": "cli: login", "valid": True}]
+
+
+# --------------------------------------------------------------------------- #
+# Schema evidence resolution
+# --------------------------------------------------------------------------- #
+
+
+class _FakeStoryWithSchema:
+    """Stand-in for Story with evidence_schema field."""
+
+    def __init__(self, tests=(), surface=(), docs=(), schema=()):
+        self.evidence_tests = list(tests)
+        self.evidence_surface = list(surface)
+        self.evidence_docs = list(docs)
+        self.evidence_schema = list(schema)
+
+
+def _make_sql_migration(repo: Path, rel_path: str, content: str) -> Path:
+    """Write a migration file at ``rel_path`` under ``repo``."""
+    full = repo / rel_path
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_text(content, encoding="utf-8")
+    return full
+
+
+def test_resolve_schema_ref_found_sql(tmp_path):
+    """schema:users.email resolves when a SQL migration defines the column."""
+    _make_sql_migration(
+        tmp_path,
+        "migrations/001_create_users.sql",
+        "CREATE TABLE users (\n  id INTEGER PRIMARY KEY,\n  email VARCHAR(255) NOT NULL\n);\n",
+    )
+    story = _FakeStoryWithSchema(schema=["users.email"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["schema_resolved"]) == 1
+    assert out["schema_resolved"][0]["ref"] == "users.email"
+    assert out["schema_resolved"][0]["file"] == "migrations/001_create_users.sql"
+    assert out["schema_resolved"][0]["line"] == 3  # line with 'email'
+    assert out["schema_missing"] == []
+
+
+def test_resolve_schema_ref_found_rails(tmp_path):
+    """schema:users.email resolves in a Rails-style migration."""
+    _make_sql_migration(
+        tmp_path,
+        "db/migrate/20240101_create_users.rb",
+        (
+            "class CreateUsers < ActiveRecord::Migration[7.0]\n"
+            "  def change\n"
+            "    create_table :users do |t|\n"
+            "      t.string :email, null: false\n"
+            "      t.timestamps\n"
+            "    end\n"
+            "  end\n"
+            "end\n"
+        ),
+    )
+    story = _FakeStoryWithSchema(schema=["users.email"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["schema_resolved"]) == 1
+    assert out["schema_resolved"][0]["ref"] == "users.email"
+    assert "db/migrate" in out["schema_resolved"][0]["file"]
+    assert out["schema_missing"] == []
+
+
+def test_resolve_schema_ref_not_found(tmp_path):
+    """Schema ref reports missing when no migration matches."""
+    _make_sql_migration(
+        tmp_path,
+        "migrations/001_create_users.sql",
+        "CREATE TABLE users (\n  id INTEGER PRIMARY KEY\n);\n",
+    )
+    story = _FakeStoryWithSchema(schema=["users.phone"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert out["schema_resolved"] == []
+    assert out["schema_missing"] == ["users.phone"]
+
+
+def test_resolve_schema_ref_no_migrations(tmp_path):
+    """Schema ref reports missing when no migration files exist."""
+    story = _FakeStoryWithSchema(schema=["users.email"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert out["schema_resolved"] == []
+    assert out["schema_missing"] == ["users.email"]
+
+
+def test_resolve_schema_ref_malformed(tmp_path):
+    """Malformed schema refs are reported as missing."""
+    story = _FakeStoryWithSchema(schema=["not-a-valid-ref", "users", ".column", ""])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert out["schema_resolved"] == []
+    # Empty string is stripped and skipped.
+    assert sorted(out["schema_missing"]) == [".column", "not-a-valid-ref", "users"]
+
+
+def test_resolve_schema_ref_most_recent_migration_wins(tmp_path):
+    """When multiple migrations reference the column, the last one wins."""
+    _make_sql_migration(
+        tmp_path,
+        "migrations/001_create_users.sql",
+        "CREATE TABLE users (\n  id INTEGER,\n  email VARCHAR(100)\n);\n",
+    )
+    _make_sql_migration(
+        tmp_path,
+        "migrations/002_alter_users.sql",
+        "ALTER TABLE users ALTER COLUMN email VARCHAR(255);\n",
+    )
+    story = _FakeStoryWithSchema(schema=["users.email"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["schema_resolved"]) == 1
+    assert out["schema_resolved"][0]["file"] == "migrations/002_alter_users.sql"
+
+
+def test_validate_surface_ref_schema_valid():
+    assert inv._validate_surface_ref("schema: users.email") is True
+    assert inv._validate_surface_ref("schema: accounts.created_at") is True
+
+
+def test_validate_surface_ref_schema_invalid():
+    assert inv._validate_surface_ref("schema: users") is False
+    assert inv._validate_surface_ref("schema: .col") is False
+    assert inv._validate_surface_ref("schema: ") is False

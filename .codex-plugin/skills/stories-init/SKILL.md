@@ -5,67 +5,171 @@ description: Initialize docs/stories/ for a repository — create the directory,
 
 # stories-init
 
-Initialize `docs/stories/` in two phases, while following the target repo's
-work conventions.
+Initialize `docs/stories/` in two phases. Phase 1 is mechanical and is
+already implemented by `scripts/stories-init-mechanical`. This skill
+documents Phase 2: the LLM-driven seeding pass that runs only on a fresh
+init.
 
 ## Before Writing
 
-- Read local instructions: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, README, and
-  any documented contribution flow.
-- Use the repo's required branch/worktree flow. If none is documented, use a
-  dedicated feature branch in a linked worktree outside the repo.
-- If the repo uses an issue tracker with claim semantics, find or create the
-  relevant issue and claim it before edits.
+- Read local instructions: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, README,
+  and any documented contribution flow.
+- Use the repo's required branch/worktree flow. If none is documented, use
+  a dedicated feature branch in a linked worktree outside the repo.
+- If the repo uses an issue tracker with claim semantics, find or create
+  the relevant issue and claim it before edits.
 - Note the verification command before changing files.
 
-## Phase 1
+## Phase 1 (mechanical)
 
-Run:
+Run the bundled script:
 
 ```bash
-stories-init/scripts/init.py --repo-root <repo-root>
+scripts/stories-init-mechanical --repo-root <repo-root>
 ```
 
-The script creates missing `docs/stories/` scaffolding, appends
-`docs/stories/drift-todo.md` to `.gitignore`, detects root agent-instruction
-files, and returns JSON including `fresh_init`.
+It creates missing `docs/stories/` scaffolding (`README.md`, `INDEX.md`),
+appends `docs/stories/drift-todo.md` to `.gitignore`, detects root
+agent-instruction files, and prints JSON of the form:
 
-If `docs/stories/` already existed, treat `fresh_init: false`: fill missing
-mechanical files only and do not seed stories.
+```json
+{
+  "fresh_init": true,
+  "created": ["docs/stories/", "docs/stories/README.md", "docs/stories/INDEX.md"],
+  "preserved": [],
+  "gitignore_updated": true,
+  "agent_instruction_files": ["AGENTS.md"]
+}
+```
 
-## Phase 2
+Phase 1 is idempotent. Any pre-existing `docs/stories/` (with or without
+stories) yields `fresh_init: false`. Phase 1 never authors stories and
+never edits agent-instruction files.
 
-Run only when `fresh_init: true`:
+If `fresh_init` is `false`, stop here. Do not seed stories. Phase 2 is
+fresh-init-only.
 
-1. Invoke `list_candidates.py`.
-2. Pick distinct, user-invoked, non-trivial workflows.
-3. Draft observed-mode stories.
-4. Run the independent Draft Story Evaluation gate for each draft when
-   subagents are available.
-5. Write passing or explicitly retained drafts with `write_story.py --observed`.
-6. Seed 5 stories by default, or the count the user explicitly requested.
+## Phase 2 (LLM seeding — fresh init only)
 
-If independent review cannot run or is declined, retained seeded stories must
-stay `status: draft` and be reported as unevaluated.
+Run Phase 2 only when the Phase 1 output reports `fresh_init: true`.
+
+1. **Discover candidates.** Invoke `list_candidates.py`:
+
+   ```bash
+   shared/list_candidates.py --repo-root <repo-root>
+   ```
+
+   Output is `{"candidates": [{"kind", "name", "summary", "evidence": [...]}, ...]}`.
+
+2. **Select the top candidates.** Apply these criteria:
+
+   - user-invoked surfaces (CLI commands, HTTP routes, top-level user
+     scripts, package `bin`, package `exports`);
+   - distinct workflows (do not pick variants of the same flow);
+   - non-trivial intent (skip surfaces whose purpose is purely structural
+     or infrastructural — build, lint, typecheck, etc.).
+
+   Default to the top 5. Honor an explicit user-requested count when given
+   (for example, 10).
+
+3. **Draft observed-mode stories.** Write real LLM-authored prose for each
+   candidate. For each draft, inspect deterministic evidence for both the
+   happy path and non-happy-path behavior: tests, validation code,
+   error-handling branches, documented error responses. Look for
+   validation errors, missing inputs, empty states, permission/auth
+   failures, unsupported formats, timeout or network failures, idempotency
+   behavior, and fallback paths. Capture observable failure behavior in
+   `Expected Behavior` and known edge cases or exclusions in `Boundaries`.
+   Do not invent failure modes the evidence does not support; if no
+   negative-path evidence exists for a draft, omit it rather than
+   fabricating it.
+
+4. **Run the Draft Story Evaluation gate.** Before writing or recommending
+   promotion of any draft, launch a context-free evaluator subagent when
+   the runtime supports subagents. The evaluator must not inherit this
+   conversation or the drafting rationale. Pass only:
+
+   - the draft story;
+   - the relevant candidate metadata and evidence snippets;
+   - existing story slugs and titles (none on fresh init);
+   - the storystore schema and editorial rules (`shared/spec.md`).
+
+   If launching the subagent requires user permission, ask eagerly and
+   explicitly:
+
+   ```text
+   Independent story review is a required storystore quality gate. May I
+   launch a context-free evaluator subagent with only the draft story and
+   evidence packet?
+   ```
+
+   Evaluator output format:
+
+   ```json
+   {
+     "verdict": "pass | revise | reject",
+     "promotion_recommendation": "keep_draft | ready_for_active | needs_human_acceptance",
+     "confidence": "low | medium | high",
+     "findings": [
+       {
+         "severity": "blocker | major | minor",
+         "kind": "intent-vague | scope-too-broad | implementation-led | claim-not-auditable | evidence-overreach | authority-mismatch | boundary-weak | duplicate-risk",
+         "section": "Intent",
+         "issue": "What is wrong.",
+         "suggested_fix": "Small, concrete repair.",
+         "requires_human": false
+       }
+     ]
+   }
+   ```
+
+   Verdict handling:
+
+   - `pass`: write the story as draft.
+   - `revise`: address findings once and review again when feasible.
+   - `reject`: do not write unless the user explicitly asks to keep the
+     draft.
+
+   Promotion to `active` requires a clean review (no blocker or major
+   findings, no placeholder Intent, sufficient claims/evidence, no
+   unresolved human-intent questions).
+
+   If permission is declined or the runtime cannot launch a context-free
+   evaluator, retained drafts must be written with `status: draft` and
+   reported as unevaluated. Do not recommend promotion to `active`.
+
+5. **Write passing drafts.** For each draft that passed (or was explicitly
+   retained by the user), pipe its JSON to:
+
+   ```bash
+   shared/write_story.py --repo-root <repo-root> --observed
+   ```
+
+   `write_story.py` enforces the slug rules and validity matrix, writes
+   `docs/stories/<slug>.md`, and wholesale-regenerates `docs/stories/INDEX.md`.
+
+   `--observed` defaults: `status=draft`, `authority=observed`,
+   `change_resistance=low`, `locked_sections=[]`. `authority: observed`
+   with `change_resistance` in `{high, immutable}` exits 3.
 
 ## Follow-Up
 
-After fresh init, offer this pointer for detected agent-instruction files, but
-edit them only with explicit user approval:
+After Phase 2 completes, offer this pointer for each detected
+agent-instruction file from Phase 1's output. This is a one-time
+fresh-init-only offer; never re-offer it. Apply the edit only with
+explicit user approval.
 
 ```markdown
-- This repo uses intent stories under `docs/stories/`. Before making behavioral
-  changes to user-facing functionality, run `stories-impact-check`.
+- This repo uses intent stories under `docs/stories/`. Before making
+  behavioral changes to user-facing functionality, run
+  `stories-impact-check`.
 ```
 
-Record follow-up work in the repo tracker. Use `docs/stories/drift-todo.md`
-only for story/software drift notes.
+Record any follow-up work in the repo tracker. Use
+`docs/stories/drift-todo.md` only for story/software drift notes.
 
 ## Finish
 
-Review the diff, rebuild generated plugin/docs outputs when the repo tracks
-them, run the selected verification command, and report the branch/worktree,
-tracker item, and verification result.
-
-**Status:** Implementation deferred to Plan 1. See `spec.md` and
-`2026-05-01-storystore-plan-1-foundation.md` for the full script contract.
+Review the diff, rebuild generated plugin/docs outputs when the repo
+tracks them, run the selected verification command, and report the
+branch/worktree, tracker item, and verification result.
