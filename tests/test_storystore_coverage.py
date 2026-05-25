@@ -155,6 +155,7 @@ def _make_story_obj(**kwargs):
     s.evidence_tests = kwargs.pop("evidence_tests", [])
     s.evidence_surface = kwargs.pop("evidence_surface", [])
     s.evidence_docs = kwargs.pop("evidence_docs", [])
+    s.evidence_schema = kwargs.pop("evidence_schema", [])
     s.status = kwargs.pop("status", "active")
     s.change_resistance = kwargs.pop("change_resistance", "medium")
     s.tests_applicable = kwargs.pop("tests_applicable", True)
@@ -449,6 +450,32 @@ def test_observed_story_with_tests_applicable_false_not_gated(tmp_path):
     out = json.loads(proc.stdout)
     report = Path(out["report_path"]).read_text(encoding="utf-8")
     assert "story-untested" not in report
+
+
+def test_surface_key_schema():
+    assert cov.surface_key("schema", name="users.email") == "schema:users.email"
+
+
+def test_ref_to_key_schema():
+    assert cov.ref_to_key("schema: users.email") == "schema:users.email"
+
+
+def test_ref_to_key_schema_unknown_is_none():
+    # schema refs must go through ref_to_key; unrecognized prefixes are None.
+    assert cov.ref_to_key("schema: users.email") is not None
+
+
+def test_schema_evidence_counts_in_completeness():
+    """Schema evidence refs contribute to the evidence completeness score."""
+    # No evidence → 0.
+    s = _make_story_obj()
+    assert cov.score_story(s).evidence == 0
+    # One schema ref → 1 (minimal).
+    s = _make_story_obj(evidence_schema=["users.email"])
+    assert cov.score_story(s).evidence == 1
+    # Schema + tests → 2 subsections → sufficient (10).
+    s = _make_story_obj(evidence_tests=["t/a.ts"], evidence_schema=["users.email"])
+    assert cov.score_story(s).evidence == 10
 
 
 def test_completeness_limit_caps_incomplete_findings(tmp_path):
