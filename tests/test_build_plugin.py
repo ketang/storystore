@@ -122,7 +122,7 @@ def test_build_writes_claude_manifest(tmp_path):
     manifest = json.loads((out / ".claude-plugin" / "plugin.json").read_text())
     assert manifest["name"] == "storystore"
     assert manifest["description"]
-    assert manifest["version"] == "0.1.0"
+    assert manifest["version"] == "0.1.1"
 
 
 def test_build_writes_codex_manifest(tmp_path):
@@ -173,7 +173,7 @@ def test_build_bump_increments_patch(tmp_path):
         check=True,
     )
     version = json.loads((out / "plugin-version.json").read_text())["version"]
-    assert version == "0.1.1"
+    assert version == "0.1.2"
 
 
 def test_build_aborts_when_canonical_skill_missing(tmp_path):
