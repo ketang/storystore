@@ -1,0 +1,1 @@
+refusing edit: story 'immutable-test' has change_resistance=immutable

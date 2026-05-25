@@ -1,0 +1,15 @@
+{
+  "findings_count": 1,
+  "performance": {
+    "duration_ms": 0,
+    "phase_breakdown": {
+      "build_inventory": 0,
+      "coverage_stories": 0,
+      "coverage_surfaces": 0,
+      "load_stories": 0
+    },
+    "stories_scanned": 1,
+    "surfaces_scanned": 0
+  },
+  "report_path": "<REPORT_PATH>"
+}

@@ -1,0 +1,1 @@
+refusing edit: section 'Story' contains an inline locked block
