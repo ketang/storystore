@@ -1,0 +1,10 @@
+{
+  "name": "init-quality-cli",
+  "version": "1.0.0",
+  "bin": { "myapp": "src/cli.ts" },
+  "scripts": {
+    "start": "node src/cli.ts",
+    "build": "tsc",
+    "test": "jest"
+  }
+}
