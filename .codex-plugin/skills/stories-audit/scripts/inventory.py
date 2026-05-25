@@ -121,6 +121,10 @@ def _flag_definition_patterns(identifier: str) -> list[re.Pattern[str]]:
         re.compile(rf"""^\s*{esc}\s*:""", re.MULTILINE),
     ]
 
+# Regex for validating a copy ref: <file>#<key>
+# File must end with .json, .yaml, or .yml; key is a dot-separated path.
+_COPY_REF_RE = re.compile(r"^(?P<file>[^\s#]+\.(?:json|ya?ml))#(?P<key>[a-zA-Z_][a-zA-Z0-9_.]*[a-zA-Z0-9_])$")
+
 
 # --------------------------------------------------------------------------- #
 # Regexes
@@ -384,6 +388,8 @@ def _validate_surface_ref(ref: str) -> bool:
         return bool(_SCHEMA_REF_RE.match(rest))
     if prefix == "flag":
         return bool(_FLAG_REF_RE.match(rest))
+    if prefix == "copy":
+        return bool(_COPY_REF_RE.match(rest))
     # Unknown prefix.
     return False
 
@@ -529,6 +535,160 @@ def _resolve_flag_ref(
     return None
 
 
+def _resolve_copy_ref(
+    repo_root: Path, ref: str
+) -> Optional[dict[str, Any]]:
+    """Resolve a single ``copy:<file>#<key>`` ref against locale files.
+
+    Returns ``{"file": "<relative path>", "line": <1-based>}`` when the key
+    is found, or ``None`` when the file does not exist or the key path is
+    missing.
+    """
+    ref = ref.strip()
+    m = _COPY_REF_RE.match(ref)
+    if not m:
+        return None
+
+    file_rel = m.group("file")
+    key_path = m.group("key")
+    locale_path = repo_root / file_rel
+
+    if not locale_path.is_file():
+        return None
+
+    try:
+        text = locale_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    suffix = locale_path.suffix.lower()
+    if suffix == ".json":
+        try:
+            data = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            return None
+    elif suffix in (".yaml", ".yml"):
+        # Minimal YAML-subset parser for flat/nested string mappings.
+        # Avoids a PyYAML dependency; handles the common locale-file shape.
+        data = _parse_simple_yaml(text)
+        if data is None:
+            return None
+    else:
+        return None
+
+    # Navigate the dot-separated key path.
+    keys = key_path.split(".")
+    current = data
+    for segment in keys:
+        if not isinstance(current, dict) or segment not in current:
+            return None
+        current = current[segment]
+
+    # Find the line number of the final key in the file.
+    line_no = _find_key_line(text, keys, suffix)
+    return {"file": file_rel, "line": line_no}
+
+
+def _parse_simple_yaml(text: str) -> Optional[dict[str, Any]]:
+    """Parse a minimal YAML subset sufficient for locale files.
+
+    Handles nested mappings with consistent 2-space indentation and scalar
+    string values.  Returns ``None`` on anything too complex.
+    """
+    root: dict[str, Any] = {}
+    # Stack of (indent_level, dict_ref)
+    stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
+
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(stripped)
+        if ":" not in stripped:
+            continue
+
+        key_part, _, value_part = stripped.partition(":")
+        key = key_part.strip()
+        value = value_part.strip()
+
+        # Pop stack to find parent at lower indent.
+        while len(stack) > 1 and stack[-1][0] >= indent:
+            stack.pop()
+
+        parent = stack[-1][1]
+
+        if value == "" or value.startswith("#"):
+            # Mapping node — next indented lines are children.
+            child: dict[str, Any] = {}
+            parent[key] = child
+            stack.append((indent, child))
+        else:
+            # Strip surrounding quotes from value.
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                value = value[1:-1]
+            parent[key] = value
+
+    return root
+
+
+def _find_key_line(text: str, keys: list[str], suffix: str) -> int:
+    """Find the 1-based line number of the deepest key in the file.
+
+    For JSON files, tracks brace/bracket depth to find the key at the right
+    nesting level. For YAML files, tracks indentation context.
+    """
+    lines = text.splitlines()
+
+    if suffix == ".json":
+        # Walk through looking for each key in sequence at increasing depth.
+        target_depth = 0
+        current_depth = 0
+        key_idx = 0
+        last_line = 1
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            for ch in stripped:
+                if ch == "{":
+                    current_depth += 1
+                elif ch == "}":
+                    current_depth -= 1
+                elif ch == "[":
+                    current_depth += 1
+                elif ch == "]":
+                    current_depth -= 1
+
+            if key_idx < len(keys):
+                # Look for the key at the expected depth.
+                target_key = keys[key_idx]
+                # Check for "key": pattern in JSON.
+                if (f'"{target_key}"' in stripped) and current_depth == target_depth + 1:
+                    last_line = i + 1
+                    key_idx += 1
+                    target_depth += 1
+
+        return last_line
+    else:
+        # YAML: look for keys at increasing indentation.
+        expected_indent = 0
+        key_idx = 0
+        last_line = 1
+
+        for i, line in enumerate(lines):
+            stripped = line.lstrip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            indent = len(line) - len(stripped)
+            if key_idx < len(keys):
+                target_key = keys[key_idx]
+                if stripped.startswith(target_key + ":") and indent == expected_indent:
+                    last_line = i + 1
+                    key_idx += 1
+                    expected_indent = indent + 2  # Assume 2-space indent.
+
+        return last_line
+
+
 def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
     """Resolve a story's declared evidence refs against the repo.
 
@@ -602,6 +762,23 @@ def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
         else:
             flag_missing.append(ref)
 
+    # Copy evidence resolution.
+    copy_resolved: list[dict[str, Any]] = []
+    copy_missing: list[str] = []
+    copy_refs_raw = getattr(story, "evidence_copy", []) or []
+    for ref in copy_refs_raw:
+        ref = ref.strip()
+        if not ref:
+            continue
+        if not _COPY_REF_RE.match(ref):
+            copy_missing.append(ref)
+            continue
+        result = _resolve_copy_ref(repo_root, ref)
+        if result is not None:
+            copy_resolved.append({"ref": ref, **result})
+        else:
+            copy_missing.append(ref)
+
     return {
         "tests_resolved": tests_resolved,
         "tests_missing": tests_missing,
@@ -612,6 +789,8 @@ def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
         "schema_missing": schema_missing,
         "flag_resolved": flag_resolved,
         "flag_missing": flag_missing,
+        "copy_resolved": copy_resolved,
+        "copy_missing": copy_missing,
     }
 
 

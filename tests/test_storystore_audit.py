@@ -564,6 +564,85 @@ Track feature flag configuration.
     assert not _findings_of_kind(report, "flag-evidence-missing"), report
 
 
+def test_copy_evidence_missing_when_ref_does_not_resolve(tmp_path):
+    """copy-evidence-missing finding is emitted for unresolvable copy refs."""
+    repo = _init_repo(tmp_path)
+    stories_dir = repo / "docs" / "stories"
+    stories_dir.mkdir(parents=True, exist_ok=True)
+    (stories_dir / "user-copy.md").write_text(
+        """\
+---
+title: User Copy
+slug: user-copy
+status: active
+authority: accepted
+change_resistance: medium
+---
+
+# User Copy
+
+## Intent
+Display user-facing error messages.
+
+## Auditable Claims
+- The permission denied error message exists.
+
+## Evidence
+### Copy
+- `en/messages.json#errors.permission_denied`
+""",
+        encoding="utf-8",
+    )
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["findings_count"] >= 1
+    report = (repo / "audit.md").read_text()
+    assert _findings_of_kind(report, "copy-evidence-missing"), report
+
+
+def test_copy_evidence_resolved_no_finding(tmp_path):
+    """No copy-evidence-missing when locale file contains the key."""
+    repo = _init_repo(tmp_path)
+    # Create a locale file.
+    locale_dir = repo / "en"
+    locale_dir.mkdir()
+    (locale_dir / "messages.json").write_text(
+        '{\n  "errors": {\n    "permission_denied": "Access denied"\n  }\n}\n',
+        encoding="utf-8",
+    )
+    stories_dir = repo / "docs" / "stories"
+    stories_dir.mkdir(parents=True, exist_ok=True)
+    (stories_dir / "user-copy.md").write_text(
+        """\
+---
+title: User Copy
+slug: user-copy
+status: active
+authority: accepted
+change_resistance: medium
+---
+
+# User Copy
+
+## Intent
+Display user-facing error messages.
+
+## Auditable Claims
+- The permission denied error message exists.
+
+## Evidence
+### Copy
+- `en/messages.json#errors.permission_denied`
+""",
+        encoding="utf-8",
+    )
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr
+    report = (repo / "audit.md").read_text()
+    assert not _findings_of_kind(report, "copy-evidence-missing"), report
+
+
 def test_perf_warn_threshold_zero_disables(tmp_path):
     """STORYSTORE_PERF_WARN_MS=0 disables the threshold warning."""
     repo = _init_repo(tmp_path)

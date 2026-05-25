@@ -309,3 +309,33 @@ One thing.
     assert story.tests_applicable is True
     assert story.locked_sections == []
     assert story.last_audited is None
+
+
+def test_parse_evidence_copy_section(tmp_path):
+    """Copy evidence items are parsed from ### Copy subsection."""
+    text = """\
+---
+title: Copy Test
+slug: copy-test
+status: active
+authority: accepted
+change_resistance: medium
+---
+
+# Copy Test
+
+## Intent
+Test copy evidence parsing.
+
+## Evidence
+### Copy
+- `en/messages.json#errors.permission_denied`
+- `locales/fr.yaml#nav.home`
+"""
+    p = tmp_path / "copy-test.md"
+    p.write_text(text, encoding="utf-8")
+    story = lib.parse_story(p)
+    assert story.evidence_copy == [
+        "en/messages.json#errors.permission_denied",
+        "locales/fr.yaml#nav.home",
+    ]

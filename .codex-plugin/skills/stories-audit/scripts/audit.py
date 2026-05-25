@@ -106,6 +106,8 @@ def _normalize_ref(ref: str) -> Optional[tuple[str, ...]]:
         return ("schema", rest)
     if prefix == "flag":
         return ("flag", rest)
+    if prefix == "copy":
+        return ("copy", rest)
     return None
 
 
@@ -223,7 +225,7 @@ def _audit_story(
                 key = _normalize_ref(ref)
                 if key is None:
                     body = f"Surface reference `{ref}` has no inventory mapping."
-                elif key[0] in ("test", "heading", "schema"):
+                elif key[0] in ("test", "heading", "schema", "flag", "copy"):
                     # not validated against inventory; skip
                     continue
                 elif key in inventory_keys:
@@ -300,6 +302,23 @@ def _audit_story(
             )
         )
 
+    # copy-evidence-missing: declared copy ref didn't resolve.
+    for ref in resolved.get("copy_missing", []):
+        findings.append(
+            _make_finding(
+                "copy-evidence-missing",
+                story_slug=slug,
+                severity=severity,
+                suggested_action="add-evidence",
+                body=(
+                    f"Copy evidence ref `{ref}` did not resolve to a key in the locale file. "
+                    f"Either add the key to the locale file, fix the reference, "
+                    f"or update the story."
+                ),
+                title=f"copy evidence `{ref}` did not resolve",
+            )
+        )
+
     # claim-unsupported: claims with no resolved evidence support.
     claims_section = getattr(story, "sections", {}).get("Auditable Claims", "")
     claims = _extract_bullets(claims_section)
@@ -308,7 +327,8 @@ def _audit_story(
     has_valid_surface = any(e["valid"] for e in resolved.get("surface_refs", []))
     has_resolved_schema = bool(resolved.get("schema_resolved"))
     has_resolved_flag = bool(resolved.get("flag_resolved"))
-    has_any_evidence = has_resolved_tests or has_resolved_docs or has_valid_surface or has_resolved_schema or has_resolved_flag
+    has_resolved_copy = bool(resolved.get("copy_resolved"))
+    has_any_evidence = has_resolved_tests or has_resolved_docs or has_valid_surface or has_resolved_schema or has_resolved_flag or has_resolved_copy
     if claims and not has_any_evidence:
         bullets = "\n".join(f"- {c}" for c in claims)
         findings.append(

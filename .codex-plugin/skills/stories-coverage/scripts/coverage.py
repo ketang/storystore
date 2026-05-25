@@ -66,7 +66,7 @@ inv = _load_sibling("storystore_inventory", "inventory.py")
 DEFAULT_PERF_WARN_MS = 5000
 PLACEHOLDER_INTENT = "Inferred from code; not human-confirmed."
 
-DEFAULT_SURFACE_KINDS: frozenset[str] = frozenset({"cli-command", "http-route", "bin", "schema"})
+DEFAULT_SURFACE_KINDS: frozenset[str] = frozenset({"cli-command", "http-route", "bin", "schema", "copy"})
 
 # Severity derived from change_resistance.
 SEVERITY_BY_RESISTANCE: dict[str, str] = {
@@ -113,6 +113,8 @@ def surface_key(kind: str, *, name: str = "", method: str = "", path: str = "") 
         return f"exports:{name.strip()}"
     if kind == "schema":
         return f"schema:{name.strip()}"
+    if kind == "copy":
+        return f"copy:{name.strip()}"
     return None
 
 
@@ -140,6 +142,8 @@ def ref_to_key(ref: str) -> Optional[str]:
         return f"exports:{rest}"
     if prefix == "schema":
         return f"schema:{rest}"
+    if prefix == "copy":
+        return f"copy:{rest}"
     return None
 
 
@@ -237,11 +241,12 @@ def _score_evidence(story: Any) -> int:
     docs = list(getattr(story, "evidence_docs", []) or [])
     schema = list(getattr(story, "evidence_schema", []) or [])
     flag = list(getattr(story, "evidence_flag", []) or [])
+    copy = list(getattr(story, "evidence_copy", []) or [])
     section_text = story.sections.get("Evidence", "") if hasattr(story, "sections") else ""
     if section_text and _has_placeholder_marker(section_text):
         return 0
-    total = len(tests) + len(surface) + len(docs) + len(schema) + len(flag)
-    subsections = sum(1 for group in (tests, surface, docs, schema, flag) if group)
+    total = len(tests) + len(surface) + len(docs) + len(schema) + len(flag) + len(copy)
+    subsections = sum(1 for group in (tests, surface, docs, schema, flag, copy) if group)
     if total == 0:
         return 0
     if total >= 3 or subsections >= 2:
@@ -319,6 +324,8 @@ def _surface_label(surface: dict[str, Any]) -> str:
         return f'exports "{surface.get("name", "")}"'
     if kind == "schema":
         return f'schema "{surface.get("name", "")}"'
+    if kind == "copy":
+        return f'copy "{surface.get("name", "")}"'
     return f'{kind} {surface.get("name", "")}'
 
 

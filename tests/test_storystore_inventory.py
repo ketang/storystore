@@ -321,6 +321,8 @@ def test_resolve_evidence_handles_empty_story(tmp_path):
         "schema_missing": [],
         "flag_resolved": [],
         "flag_missing": [],
+        "copy_resolved": [],
+        "copy_missing": [],
     }
 
 
@@ -614,3 +616,128 @@ def test_validate_surface_ref_flag_invalid():
     assert inv._validate_surface_ref("flag: ") is False
     assert inv._validate_surface_ref("flag: not a flag!") is False
     assert inv._validate_surface_ref("flag: 123start") is False
+
+
+# --------------------------------------------------------------------------- #
+# Copy evidence resolution
+# --------------------------------------------------------------------------- #
+
+
+class _FakeStoryWithCopy:
+    """Stand-in for Story with evidence_copy field."""
+
+    def __init__(self, tests=(), surface=(), docs=(), schema=(), copy=()):
+        self.evidence_tests = list(tests)
+        self.evidence_surface = list(surface)
+        self.evidence_docs = list(docs)
+        self.evidence_schema = list(schema)
+        self.evidence_copy = list(copy)
+
+
+def _make_locale_file(repo: Path, rel_path: str, content: str) -> Path:
+    """Write a locale file at ``rel_path`` under ``repo``."""
+    full = repo / rel_path
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_text(content, encoding="utf-8")
+    return full
+
+
+def test_resolve_copy_ref_found_json(tmp_path):
+    """copy:en/messages.json#errors.permission_denied resolves when key exists."""
+    _make_locale_file(
+        tmp_path,
+        "en/messages.json",
+        '{\n  "errors": {\n    "permission_denied": "Access denied"\n  }\n}\n',
+    )
+    story = _FakeStoryWithCopy(copy=["en/messages.json#errors.permission_denied"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["copy_resolved"]) == 1
+    assert out["copy_resolved"][0]["ref"] == "en/messages.json#errors.permission_denied"
+    assert out["copy_resolved"][0]["file"] == "en/messages.json"
+    assert out["copy_resolved"][0]["line"] >= 1
+    assert out["copy_missing"] == []
+
+
+def test_resolve_copy_ref_found_yaml(tmp_path):
+    """copy:en/messages.yaml#errors.permission_denied resolves in YAML locale."""
+    _make_locale_file(
+        tmp_path,
+        "en/messages.yaml",
+        "errors:\n  permission_denied: Access denied\n",
+    )
+    story = _FakeStoryWithCopy(copy=["en/messages.yaml#errors.permission_denied"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["copy_resolved"]) == 1
+    assert out["copy_resolved"][0]["ref"] == "en/messages.yaml#errors.permission_denied"
+    assert out["copy_resolved"][0]["file"] == "en/messages.yaml"
+    assert out["copy_missing"] == []
+
+
+def test_resolve_copy_ref_found_yml(tmp_path):
+    """copy:en/messages.yml#greeting resolves with .yml extension."""
+    _make_locale_file(
+        tmp_path,
+        "en/messages.yml",
+        "greeting: Hello\n",
+    )
+    story = _FakeStoryWithCopy(copy=["en/messages.yml#greeting"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["copy_resolved"]) == 1
+    assert out["copy_resolved"][0]["ref"] == "en/messages.yml#greeting"
+    assert out["copy_missing"] == []
+
+
+def test_resolve_copy_ref_not_found_missing_key(tmp_path):
+    """Copy ref reports missing when the key doesn't exist in the locale file."""
+    _make_locale_file(
+        tmp_path,
+        "en/messages.json",
+        '{\n  "errors": {\n    "not_found": "Not found"\n  }\n}\n',
+    )
+    story = _FakeStoryWithCopy(copy=["en/messages.json#errors.permission_denied"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert out["copy_resolved"] == []
+    assert out["copy_missing"] == ["en/messages.json#errors.permission_denied"]
+
+
+def test_resolve_copy_ref_not_found_missing_file(tmp_path):
+    """Copy ref reports missing when the locale file doesn't exist."""
+    story = _FakeStoryWithCopy(copy=["en/messages.json#errors.permission_denied"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert out["copy_resolved"] == []
+    assert out["copy_missing"] == ["en/messages.json#errors.permission_denied"]
+
+
+def test_resolve_copy_ref_malformed(tmp_path):
+    """Malformed copy refs are reported as missing."""
+    story = _FakeStoryWithCopy(copy=["not-a-valid-ref", "missing_hash.json", ""])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert out["copy_resolved"] == []
+    # Empty string is stripped and skipped.
+    assert sorted(out["copy_missing"]) == ["missing_hash.json", "not-a-valid-ref"]
+
+
+def test_resolve_copy_ref_nested_json_key(tmp_path):
+    """Deep nested key navigation works in JSON locale files."""
+    _make_locale_file(
+        tmp_path,
+        "locales/en.json",
+        '{\n  "app": {\n    "settings": {\n      "theme": {\n        "dark": "Dark mode"\n      }\n    }\n  }\n}\n',
+    )
+    story = _FakeStoryWithCopy(copy=["locales/en.json#app.settings.theme.dark"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["copy_resolved"]) == 1
+    assert out["copy_resolved"][0]["ref"] == "locales/en.json#app.settings.theme.dark"
+    assert out["copy_missing"] == []
+
+
+def test_validate_surface_ref_copy_valid():
+    assert inv._validate_surface_ref("copy: en/messages.json#errors.denied") is True
+    assert inv._validate_surface_ref("copy: locales/fr.yaml#greeting") is True
+    assert inv._validate_surface_ref("copy: i18n/de.yml#nav.home") is True
+
+
+def test_validate_surface_ref_copy_invalid():
+    assert inv._validate_surface_ref("copy: messages.txt#key") is False
+    assert inv._validate_surface_ref("copy: ") is False
+    assert inv._validate_surface_ref("copy: file.json") is False
