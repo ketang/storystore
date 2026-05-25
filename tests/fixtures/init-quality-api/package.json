@@ -1,0 +1,10 @@
+{
+  "name": "init-quality-api",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node src/server.ts",
+    "dev": "nodemon src/server.ts",
+    "build": "tsc",
+    "test": "jest"
+  }
+}
