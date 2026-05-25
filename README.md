@@ -16,25 +16,34 @@ The core rule:
 
 Six skills, all named `stories-*`:
 
-- `stories-init` — initialize `docs/stories/` for a repo.
-- `stories-generate` — author a new story (interview or observed mode).
-- `stories-audit` — story-to-software fidelity report.
-- `stories-coverage` — software-to-story coverage report.
-- `stories-update` — guarded edits to existing stories.
-- `stories-impact-check` — pre-change lookup of affected stories.
+| Skill | Description |
+|---|---|
+| `stories-init` | Initialize `docs/stories/` for a repository — creates the directory, writes README and INDEX stubs, gitignores `drift-todo.md`, and seeds top observed-mode stories on fresh init. |
+| `stories-generate` | Author a new intent story in interview mode (`authority: accepted`) or observed mode (`authority: observed`). Includes independent LLM-driven editorial review before promotion. Regenerates `INDEX.md`. |
+| `stories-audit` | Read-only story-to-software fidelity report. Deterministic findings: `surface-missing`, `test-evidence-missing`, `claim-unsupported`, `intent-conflict`. Optional narrative D-pass: `claim-contradicted`, `story-ambiguous`, `documented-untested`. Supports `--strict`, `--bump-clean`, `--thorough`, and monorepo scoping. |
+| `stories-coverage` | Read-only software-to-story coverage report. Findings: `surface-uncovered`, `story-untested`, `story-incomplete`. Completeness scoring across five dimensions (Skeletal through Complete). Default surface kinds: `cli-command`, `http-route`, `package-bin`. |
+| `stories-update` | Guarded editing for existing stories. Runs scoped audit before edits, blocks silent updates on stories with audit findings, and enforces locked-section and meaning-change policies. Regenerates `INDEX.md` on metadata changes. |
+| `stories-impact-check` | Hard-trigger pre-change lookup. Reports stories affected by planned file, surface, or behavior changes with status, authority, change resistance, and intent excerpt. Read-only. |
 
 ## Repository Layout
 
 ```text
 skills/<name>/SKILL.md        # canonical hand-edited skill source
+shared/                        # Python runtime (audit, coverage, inventory, etc.)
 scripts/build-plugin          # builds Claude and Codex plugin payloads
+scripts/install-codex-plugin  # public installer for Codex
 tests/                         # pytest suite
 plugin-version.json           # single source of truth for the plugin version
 spec.md                       # plugin schema and tooling reference
-.claude-plugin/plugin.json    # generated Claude manifest
-.claude/skills/<name>.md      # generated Claude per-skill flat files
-.codex-plugin/plugin.json     # generated Codex manifest
-.codex-plugin/skills/<name>/  # generated Codex per-skill payloads
+```
+
+Generated outputs (committed, rebuilt by `scripts/build-plugin`):
+
+```text
+.claude-plugin/plugin.json    # Claude plugin manifest
+.claude/skills/<name>.md      # Claude per-skill flat files (skill + shared scripts inlined)
+.codex-plugin/plugin.json     # Codex plugin manifest
+.codex-plugin/skills/<name>/  # Codex per-skill payloads (SKILL.md + shared scripts)
 ```
 
 ## Build
@@ -43,37 +52,22 @@ spec.md                       # plugin schema and tooling reference
 scripts/build-plugin          # build manifests + skill payloads
 scripts/build-plugin --bump   # bump patch version then build
 scripts/build-plugin -v       # print each output path
+scripts/build-plugin --shared-only  # materialize shared scripts without full rebuild
 ```
 
-## Install For Codex
-
-Install Storystore for Codex from the public GitHub-hosted installer:
+## Test
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ketang/storystore/main/scripts/install-codex-plugin | bash
+python3 -m pytest tests/ -x -q
 ```
 
-Do not install Storystore from a local repository checkout. The public
-installer path is the supported installation method because it exercises the
-same downloaded payload users receive and avoids stale local build artifacts.
+## Install
 
-To pass installer options, use `bash -s --` after the pipe:
+See [INSTALL.md](INSTALL.md) for step-by-step installation instructions for
+Claude Code and Codex.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/ketang/storystore/main/scripts/install-codex-plugin | bash -s -- --help
-```
+## Schema Reference
 
-Useful public-install options include `--skip-register`, `--codex-home`, and
-`--marketplace-root`.
-
-## Status
-
-Bootstrap only. Skills are placeholder SKILL.md stubs. The phased
-implementation lives in three plan documents:
-
-- `2026-05-01-storystore-plan-1-foundation.md` — `stories-init`, `stories-generate`
-- `2026-05-01-storystore-plan-2-fidelity.md` — `stories-audit`, `stories-coverage`
-- `2026-05-01-storystore-plan-3-edits-and-impact.md` — `stories-update`, `stories-impact-check`
-
-See `2026-05-01-storystore-target-design.md` and `spec.md` for the schema
-and tooling reference.
+See [spec.md](spec.md) for the full story frontmatter schema, body sections,
+finding kinds, severity rules, completeness scoring, exit codes, and
+performance contracts.
