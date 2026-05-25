@@ -1,0 +1,23 @@
+{
+  "matches": [
+    {
+      "authority": "accepted",
+      "change_resistance": "high",
+      "flags": [],
+      "intent_excerpt": "An API client creates a new widget by POSTing to `/widgets`.",
+      "locked_sections": [
+        "Intent"
+      ],
+      "match_reasons": [
+        "surface: POST /widgets"
+      ],
+      "slug": "create-widget-endpoint",
+      "status": "active",
+      "title": "Create widget endpoint"
+    }
+  ],
+  "performance": {
+    "duration_ms": 0,
+    "stories_scanned": 1
+  }
+}

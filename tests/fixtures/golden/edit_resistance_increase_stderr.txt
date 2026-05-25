@@ -1,0 +1,1 @@
+resistance increase requires --confirm-resistance-change

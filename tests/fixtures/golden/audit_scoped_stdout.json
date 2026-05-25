@@ -1,0 +1,13 @@
+{
+  "findings_count": 0,
+  "performance": {
+    "duration_ms": 0,
+    "evidence_refs_resolved": 2,
+    "phase_breakdown": {
+      "load_stories": 0,
+      "resolve_evidence": 0
+    },
+    "stories_scanned": 1
+  },
+  "report_path": "<REPORT_PATH>"
+}

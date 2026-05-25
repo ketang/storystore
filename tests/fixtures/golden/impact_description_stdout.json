@@ -1,0 +1,38 @@
+{
+  "matches": [
+    {
+      "authority": "observed",
+      "change_resistance": "low",
+      "flags": [
+        "observed-authority (non-gating)"
+      ],
+      "intent_excerpt": "A user runs `cli build` to compile the project.",
+      "locked_sections": [],
+      "match_reasons": [
+        "description: matched tokens [project]"
+      ],
+      "slug": "cli-build-command",
+      "status": "active",
+      "title": "CLI build command"
+    },
+    {
+      "authority": "observed",
+      "change_resistance": "medium",
+      "flags": [
+        "observed-authority (non-gating)"
+      ],
+      "intent_excerpt": "A user runs the `init` subcommand to scaffold a new project.",
+      "locked_sections": [],
+      "match_reasons": [
+        "description: matched tokens [project, scaffold]"
+      ],
+      "slug": "cli-init-command",
+      "status": "active",
+      "title": "CLI init command"
+    }
+  ],
+  "performance": {
+    "duration_ms": 0,
+    "stories_scanned": 2
+  }
+}
