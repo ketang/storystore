@@ -94,6 +94,7 @@ class Story:
     evidence_surface: list[str] = field(default_factory=list)
     evidence_docs: list[str] = field(default_factory=list)
     evidence_schema: list[str] = field(default_factory=list)
+    evidence_flag: list[str] = field(default_factory=list)
 
 
 class PerfTimer:
@@ -352,11 +353,12 @@ def _parse_sections(body: str, body_start_line: int, path: Optional[Path]) -> di
     return sections
 
 
-def _parse_evidence(section_text: str) -> tuple[list[str], list[str], list[str], list[str]]:
+def _parse_evidence(section_text: str) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
     tests: list[str] = []
     surface: list[str] = []
     docs: list[str] = []
     schema: list[str] = []
+    flag: list[str] = []
     current: Optional[str] = None
     for line in section_text.splitlines():
         s = line.strip()
@@ -379,7 +381,9 @@ def _parse_evidence(section_text: str) -> tuple[list[str], list[str], list[str],
                 docs.append(item)
             elif current == "schema":
                 schema.append(item)
-    return tests, surface, docs, schema
+            elif current in ("flag", "flags"):
+                flag.append(item)
+    return tests, surface, docs, schema, flag
 
 
 def _parse_locked_blocks(body: str, body_start_line: int, path: Optional[Path]) -> list[LockedBlock]:
@@ -434,7 +438,7 @@ def parse_story(path: Path, text: Optional[str] = None) -> Story:
     if "Intent" not in sections or not sections["Intent"].strip():
         raise ParseError("missing required Intent section", path=path)
     locked_blocks = _parse_locked_blocks(body, body_start_line, path=path)
-    tests, surface, docs, schema = _parse_evidence(sections.get("Evidence", ""))
+    tests, surface, docs, schema, flag = _parse_evidence(sections.get("Evidence", ""))
 
     if data["tests_applicable"] is False and tests:
         raise ParseError(
@@ -459,6 +463,7 @@ def parse_story(path: Path, text: Optional[str] = None) -> Story:
         evidence_surface=surface,
         evidence_docs=docs,
         evidence_schema=schema,
+        evidence_flag=flag,
     )
 
 

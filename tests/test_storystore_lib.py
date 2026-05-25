@@ -193,6 +193,16 @@ def test_parse_story_sections_and_evidence(tmp_path):
     assert story.evidence_tests == ["tests/test_example.py"]
     assert story.evidence_surface == ["cli: example"]
     assert story.evidence_docs == ["README.md"]
+    assert story.evidence_flag == []
+
+
+def test_parse_story_evidence_flag_subsection(tmp_path):
+    """Flag evidence subsection is parsed into evidence_flag."""
+    text = VALID_FM.rstrip() + "\n### Flag\n- `experimental_collab`\n- `dark_mode`\n"
+    p = tmp_path / "with-flags.md"
+    p.write_text(text, encoding="utf-8")
+    story = lib.parse_story(p)
+    assert story.evidence_flag == ["experimental_collab", "dark_mode"]
 
 
 def test_parse_story_missing_intent_is_error(tmp_path):

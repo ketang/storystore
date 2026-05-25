@@ -236,11 +236,12 @@ def _score_evidence(story: Any) -> int:
     surface = list(getattr(story, "evidence_surface", []) or [])
     docs = list(getattr(story, "evidence_docs", []) or [])
     schema = list(getattr(story, "evidence_schema", []) or [])
+    flag = list(getattr(story, "evidence_flag", []) or [])
     section_text = story.sections.get("Evidence", "") if hasattr(story, "sections") else ""
     if section_text and _has_placeholder_marker(section_text):
         return 0
-    total = len(tests) + len(surface) + len(docs) + len(schema)
-    subsections = sum(1 for group in (tests, surface, docs, schema) if group)
+    total = len(tests) + len(surface) + len(docs) + len(schema) + len(flag)
+    subsections = sum(1 for group in (tests, surface, docs, schema, flag) if group)
     if total == 0:
         return 0
     if total >= 3 or subsections >= 2:

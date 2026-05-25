@@ -97,6 +97,30 @@ MIGRATION_GLOB_PATTERNS: tuple[str, ...] = (
 # Regex for validating a schema ref: table.column
 _SCHEMA_REF_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$")
 
+# Regex for validating a flag ref: bare identifier (letters, digits, underscores, hyphens)
+_FLAG_REF_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]*$")
+
+# File extensions to scan when searching for flag definitions.
+_FLAG_SOURCE_EXTENSIONS: frozenset[str] = frozenset({
+    ".rb", ".py", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs",
+    ".yml", ".yaml", ".json",
+})
+
+# Compiled patterns for flag definition discovery across common frameworks.
+# Each returns a regex that, given a flag identifier, matches lines defining it.
+def _flag_definition_patterns(identifier: str) -> list[re.Pattern[str]]:
+    """Build regexes that match common flag-definition patterns for *identifier*."""
+    # Escape for use in regex.
+    esc = re.escape(identifier)
+    return [
+        # Ruby: feature_flag :identifier  or  feature :identifier
+        re.compile(rf"""(?:feature_flag|feature|flag)\s+[:'\"]?{esc}['"]?""", re.IGNORECASE),
+        # Python/JS/TS dict/object key: "identifier" or 'identifier' as key
+        re.compile(rf"""['\"]?{esc}['\"]?\s*[:=]"""),
+        # YAML key: identifier:  (at start of line or indented)
+        re.compile(rf"""^\s*{esc}\s*:""", re.MULTILINE),
+    ]
+
 
 # --------------------------------------------------------------------------- #
 # Regexes
@@ -358,6 +382,8 @@ def _validate_surface_ref(ref: str) -> bool:
         return bool(rest)
     if prefix == "schema":
         return bool(_SCHEMA_REF_RE.match(rest))
+    if prefix == "flag":
+        return bool(_FLAG_REF_RE.match(rest))
     # Unknown prefix.
     return False
 
@@ -466,6 +492,43 @@ def _resolve_schema_ref(
     return best_match
 
 
+def _resolve_flag_ref(
+    repo_root: Path, identifier: str
+) -> Optional[dict[str, Any]]:
+    """Resolve a single ``flag:<identifier>`` ref against the host repo.
+
+    Searches source files recursively for common flag-definition patterns
+    (Ruby ``feature_flag``, Python/JS dict keys, YAML keys).
+
+    Returns ``{"file": "<relative path>", "line": <1-based>}`` for the first
+    match, or ``None`` when not found.
+    """
+    identifier = identifier.strip()
+    if not _FLAG_REF_RE.match(identifier):
+        return None
+
+    patterns = _flag_definition_patterns(identifier)
+    skip = _effective_skip_dirs(None)
+
+    for dirpath, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = sorted(d for d in dirnames if d not in skip)
+        for name in sorted(filenames):
+            file_path = Path(dirpath) / name
+            if file_path.suffix not in _FLAG_SOURCE_EXTENSIONS:
+                continue
+            try:
+                text = file_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for i, line in enumerate(text.splitlines()):
+                for pat in patterns:
+                    if pat.search(line):
+                        rel = file_path.relative_to(repo_root).as_posix()
+                        return {"file": rel, "line": i + 1}
+
+    return None
+
+
 def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
     """Resolve a story's declared evidence refs against the repo.
 
@@ -522,6 +585,23 @@ def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
             else:
                 schema_missing.append(ref)
 
+    # Flag evidence resolution.
+    flag_resolved: list[dict[str, Any]] = []
+    flag_missing: list[str] = []
+    flag_refs_raw = getattr(story, "evidence_flag", []) or []
+    for ref in flag_refs_raw:
+        ref = ref.strip()
+        if not ref:
+            continue
+        if not _FLAG_REF_RE.match(ref):
+            flag_missing.append(ref)
+            continue
+        result = _resolve_flag_ref(repo_root, ref)
+        if result is not None:
+            flag_resolved.append({"ref": ref, **result})
+        else:
+            flag_missing.append(ref)
+
     return {
         "tests_resolved": tests_resolved,
         "tests_missing": tests_missing,
@@ -530,6 +610,8 @@ def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
         "docs_missing": docs_missing,
         "schema_resolved": schema_resolved,
         "schema_missing": schema_missing,
+        "flag_resolved": flag_resolved,
+        "flag_missing": flag_missing,
     }
 
 

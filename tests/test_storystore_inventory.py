@@ -319,6 +319,8 @@ def test_resolve_evidence_handles_empty_story(tmp_path):
         "docs_missing": [],
         "schema_resolved": [],
         "schema_missing": [],
+        "flag_resolved": [],
+        "flag_missing": [],
     }
 
 
@@ -478,3 +480,137 @@ def test_validate_surface_ref_schema_invalid():
     assert inv._validate_surface_ref("schema: users") is False
     assert inv._validate_surface_ref("schema: .col") is False
     assert inv._validate_surface_ref("schema: ") is False
+
+
+# --------------------------------------------------------------------------- #
+# Flag evidence resolution
+# --------------------------------------------------------------------------- #
+
+
+class _FakeStoryWithFlag:
+    """Stand-in for Story with evidence_flag field."""
+
+    def __init__(self, tests=(), surface=(), docs=(), schema=(), flag=()):
+        self.evidence_tests = list(tests)
+        self.evidence_surface = list(surface)
+        self.evidence_docs = list(docs)
+        self.evidence_schema = list(schema)
+        self.evidence_flag = list(flag)
+
+
+def _write_flag_file(repo: Path, rel_path: str, content: str) -> Path:
+    """Write a source file at ``rel_path`` under ``repo``."""
+    full = repo / rel_path
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_text(content, encoding="utf-8")
+    return full
+
+
+def test_resolve_flag_ref_found_ruby(tmp_path):
+    """flag:experimental_collab resolves in a Ruby feature_flag definition."""
+    _write_flag_file(
+        tmp_path,
+        "config/flags.rb",
+        "class Flags\n  feature_flag :experimental_collab\n  feature_flag :dark_mode\nend\n",
+    )
+    story = _FakeStoryWithFlag(flag=["experimental_collab"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["flag_resolved"]) == 1
+    assert out["flag_resolved"][0]["ref"] == "experimental_collab"
+    assert out["flag_resolved"][0]["file"] == "config/flags.rb"
+    assert out["flag_resolved"][0]["line"] == 2
+    assert out["flag_missing"] == []
+
+
+def test_resolve_flag_ref_found_python(tmp_path):
+    """flag:experimental_collab resolves in a Python FLAGS dict."""
+    _write_flag_file(
+        tmp_path,
+        "config/flags.py",
+        'FLAGS = {\n    "experimental_collab": True,\n    "dark_mode": False,\n}\n',
+    )
+    story = _FakeStoryWithFlag(flag=["experimental_collab"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["flag_resolved"]) == 1
+    assert out["flag_resolved"][0]["ref"] == "experimental_collab"
+    assert out["flag_resolved"][0]["file"] == "config/flags.py"
+    assert out["flag_missing"] == []
+
+
+def test_resolve_flag_ref_found_js(tmp_path):
+    """flag:experimental_collab resolves in a JS/TS const object."""
+    _write_flag_file(
+        tmp_path,
+        "src/flags.ts",
+        "export const FLAGS = {\n  experimental_collab: true,\n  dark_mode: false,\n};\n",
+    )
+    story = _FakeStoryWithFlag(flag=["experimental_collab"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["flag_resolved"]) == 1
+    assert out["flag_resolved"][0]["ref"] == "experimental_collab"
+    assert out["flag_resolved"][0]["file"] == "src/flags.ts"
+    assert out["flag_missing"] == []
+
+
+def test_resolve_flag_ref_found_yaml(tmp_path):
+    """flag:experimental_collab resolves in a YAML config file."""
+    _write_flag_file(
+        tmp_path,
+        "config/features.yml",
+        "experimental_collab:\n  enabled: true\ndark_mode:\n  enabled: false\n",
+    )
+    story = _FakeStoryWithFlag(flag=["experimental_collab"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["flag_resolved"]) == 1
+    assert out["flag_resolved"][0]["ref"] == "experimental_collab"
+    assert out["flag_resolved"][0]["file"] == "config/features.yml"
+    assert out["flag_resolved"][0]["line"] == 1
+    assert out["flag_missing"] == []
+
+
+def test_resolve_flag_ref_not_found(tmp_path):
+    """Flag ref reports missing when no source file contains the identifier."""
+    _write_flag_file(
+        tmp_path,
+        "config/flags.rb",
+        "class Flags\n  feature_flag :dark_mode\nend\n",
+    )
+    story = _FakeStoryWithFlag(flag=["experimental_collab"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert out["flag_resolved"] == []
+    assert out["flag_missing"] == ["experimental_collab"]
+
+
+def test_resolve_flag_ref_no_files(tmp_path):
+    """Flag ref reports missing when no source files exist."""
+    story = _FakeStoryWithFlag(flag=["experimental_collab"])
+    out = inv.resolve_evidence(tmp_path, story)
+    assert out["flag_resolved"] == []
+    assert out["flag_missing"] == ["experimental_collab"]
+
+
+def test_resolve_flag_ref_malformed(tmp_path):
+    """Malformed flag refs are reported as missing."""
+    story = _FakeStoryWithFlag(flag=["not a valid ref!", "valid_flag", ""])
+    _write_flag_file(
+        tmp_path,
+        "config/flags.py",
+        'FLAGS = {\n    "valid_flag": True,\n}\n',
+    )
+    out = inv.resolve_evidence(tmp_path, story)
+    assert len(out["flag_resolved"]) == 1
+    assert out["flag_resolved"][0]["ref"] == "valid_flag"
+    # Empty string is stripped and skipped; malformed ref reported.
+    assert out["flag_missing"] == ["not a valid ref!"]
+
+
+def test_validate_surface_ref_flag_valid():
+    assert inv._validate_surface_ref("flag: experimental_collab") is True
+    assert inv._validate_surface_ref("flag: dark-mode") is True
+    assert inv._validate_surface_ref("flag: my_flag_123") is True
+
+
+def test_validate_surface_ref_flag_invalid():
+    assert inv._validate_surface_ref("flag: ") is False
+    assert inv._validate_surface_ref("flag: not a flag!") is False
+    assert inv._validate_surface_ref("flag: 123start") is False

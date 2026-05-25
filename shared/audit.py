@@ -104,6 +104,8 @@ def _normalize_ref(ref: str) -> Optional[tuple[str, ...]]:
         return ("heading", rest)
     if prefix == "schema":
         return ("schema", rest)
+    if prefix == "flag":
+        return ("flag", rest)
     return None
 
 
@@ -281,6 +283,23 @@ def _audit_story(
             )
         )
 
+    # flag-evidence-missing: declared flag ref didn't resolve.
+    for ref in resolved.get("flag_missing", []):
+        findings.append(
+            _make_finding(
+                "flag-evidence-missing",
+                story_slug=slug,
+                severity=severity,
+                suggested_action="add-evidence",
+                body=(
+                    f"Flag evidence ref `{ref}` did not resolve to any flag definitions "
+                    f"in the repository. Either add a flag definition that matches, fix "
+                    f"the reference, or update the story."
+                ),
+                title=f"flag evidence `{ref}` did not resolve",
+            )
+        )
+
     # claim-unsupported: claims with no resolved evidence support.
     claims_section = getattr(story, "sections", {}).get("Auditable Claims", "")
     claims = _extract_bullets(claims_section)
@@ -288,7 +307,8 @@ def _audit_story(
     has_resolved_docs = bool(resolved.get("docs_resolved"))
     has_valid_surface = any(e["valid"] for e in resolved.get("surface_refs", []))
     has_resolved_schema = bool(resolved.get("schema_resolved"))
-    has_any_evidence = has_resolved_tests or has_resolved_docs or has_valid_surface or has_resolved_schema
+    has_resolved_flag = bool(resolved.get("flag_resolved"))
+    has_any_evidence = has_resolved_tests or has_resolved_docs or has_valid_surface or has_resolved_schema or has_resolved_flag
     if claims and not has_any_evidence:
         bullets = "\n".join(f"- {c}" for c in claims)
         findings.append(

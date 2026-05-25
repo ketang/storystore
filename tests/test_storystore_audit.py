@@ -485,6 +485,85 @@ Track user email in the database.
     assert not _findings_of_kind(report, "schema-evidence-missing"), report
 
 
+def test_flag_evidence_missing_when_ref_does_not_resolve(tmp_path):
+    """flag-evidence-missing finding is emitted for unresolvable flag refs."""
+    repo = _init_repo(tmp_path)
+    stories_dir = repo / "docs" / "stories"
+    stories_dir.mkdir(parents=True, exist_ok=True)
+    (stories_dir / "feature-flags.md").write_text(
+        """\
+---
+title: Feature Flags
+slug: feature-flags
+status: active
+authority: accepted
+change_resistance: medium
+---
+
+# Feature Flags
+
+## Intent
+Track feature flag configuration.
+
+## Auditable Claims
+- The experimental_collab flag is defined.
+
+## Evidence
+### Flag
+- `experimental_collab`
+""",
+        encoding="utf-8",
+    )
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["findings_count"] >= 1
+    report = (repo / "audit.md").read_text()
+    assert _findings_of_kind(report, "flag-evidence-missing"), report
+
+
+def test_flag_evidence_resolved_no_finding(tmp_path):
+    """No flag-evidence-missing when flag definition exists."""
+    repo = _init_repo(tmp_path)
+    # Create a flag definition file.
+    config_dir = repo / "config"
+    config_dir.mkdir()
+    (config_dir / "flags.rb").write_text(
+        "class Flags\n  feature_flag :experimental_collab\nend\n",
+        encoding="utf-8",
+    )
+    stories_dir = repo / "docs" / "stories"
+    stories_dir.mkdir(parents=True, exist_ok=True)
+    (stories_dir / "feature-flags.md").write_text(
+        """\
+---
+title: Feature Flags
+slug: feature-flags
+status: active
+authority: accepted
+change_resistance: medium
+---
+
+# Feature Flags
+
+## Intent
+Track feature flag configuration.
+
+## Auditable Claims
+- The experimental_collab flag is defined.
+
+## Evidence
+### Flag
+- `experimental_collab`
+""",
+        encoding="utf-8",
+    )
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr
+    report = (repo / "audit.md").read_text()
+    assert not _findings_of_kind(report, "flag-evidence-missing"), report
+
+
 def test_perf_warn_threshold_zero_disables(tmp_path):
     """STORYSTORE_PERF_WARN_MS=0 disables the threshold warning."""
     repo = _init_repo(tmp_path)
