@@ -1,6 +1,6 @@
 {
   "name": "storystore",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Intent-story documentation with audits, guarded edits, and impact checks",
   "author": {
     "name": "Ketan Gangatirkar",
