@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_login",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"User signs in from CLI\",\"slug\":\"user-signs-in-from-cli\",\"intent\":\"A user needs authenticated CLI access before managing deployments.\",\"story\":\"The user runs the login command.\",\"expected_behavior\":\"The command starts authentication and stores usable session state.\",\"boundaries\":\"Password recovery is not covered.\",\"auditable_claims\":[\"The login command is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"cli: login\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

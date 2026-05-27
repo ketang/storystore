@@ -1,0 +1,9 @@
+{
+  "id": "msg_narrative_ambiguous",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "[{\"kind\":\"story-ambiguous\",\"story_slug\":\"user-exports-data-somehow\",\"detail\":\"The story uses vague language that cannot be verified.\"}]"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 30}
+}

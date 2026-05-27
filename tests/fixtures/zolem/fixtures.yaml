@@ -1,0 +1,43 @@
+provider: anthropic
+version: v1
+fixtures:
+  - expression: 'body["messages"][0]["content"].contains("Evaluate these")'
+    fixture: evaluation-scores
+  - expression: 'body["messages"][0]["content"].contains("Select the top")'
+    fixture: select-top-five
+  - expression: 'body["messages"][0]["content"].contains("user-exports-data-somehow")'
+    fixture: narrative-ambiguous
+  - expression: 'body["messages"][0]["content"].contains("widget-creation-returns-identifier")'
+    fixture: narrative-contradicted
+  - expression: 'body["messages"][0]["content"].contains("batch-import-processes-csv-files")'
+    fixture: narrative-untested
+  - expression: 'body["messages"][0]["content"].contains("health-endpoint-returns-status")'
+    fixture: narrative-clean
+  - expression: 'body["messages"][0]["content"].contains("Name: config-set")'
+    fixture: author-config-set
+  - expression: 'body["messages"][0]["content"].contains("Name: deploy")'
+    fixture: author-deploy
+  - expression: 'body["messages"][0]["content"].contains("Name: login")'
+    fixture: author-login
+  - expression: 'body["messages"][0]["content"].contains("Name: logs")'
+    fixture: author-logs
+  - expression: 'body["messages"][0]["content"].contains("Name: rollback")'
+    fixture: author-rollback
+  - expression: 'body["messages"][0]["content"].contains("Name: status")'
+    fixture: author-status
+  - expression: 'body["messages"][0]["content"].contains("Name: GET /api/health")'
+    fixture: author-health-route
+  - expression: 'body["messages"][0]["content"].contains("Name: DELETE /api/users/:id")'
+    fixture: author-delete-user-route
+  - expression: 'body["messages"][0]["content"].contains("Name: GET /api/reports")'
+    fixture: author-reports-route
+  - expression: 'body["messages"][0]["content"].contains("Name: GET /api/users/:id")'
+    fixture: author-get-user-route
+  - expression: 'body["messages"][0]["content"].contains("Name: GET /api/widgets")'
+    fixture: author-widgets-route
+  - expression: 'body["messages"][0]["content"].contains("Name: POST /api/users")'
+    fixture: author-create-user-route
+  - expression: 'body["messages"][0]["content"].contains("Name: POST /api/widgets")'
+    fixture: author-create-widget-route
+  - expression: 'true'
+    fixture: author-generic

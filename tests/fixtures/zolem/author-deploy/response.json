@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_deploy",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"User deploys application\",\"slug\":\"user-deploys-application\",\"intent\":\"A release operator needs to publish the current application safely.\",\"story\":\"The user runs the deploy command from the CLI.\",\"expected_behavior\":\"The command starts deployment and reports progress.\",\"boundaries\":\"Rollback behavior is covered separately.\",\"auditable_claims\":[\"The deploy command is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"cli: deploy\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

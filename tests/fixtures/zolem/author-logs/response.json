@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_logs",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"User views deployment logs\",\"slug\":\"user-views-deployment-logs\",\"intent\":\"A user needs to inspect runtime output while diagnosing deployments.\",\"story\":\"The user runs the logs command.\",\"expected_behavior\":\"The CLI displays recent log output for the selected service.\",\"boundaries\":\"This story does not cover log retention policy.\",\"auditable_claims\":[\"The logs command is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"cli: logs\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

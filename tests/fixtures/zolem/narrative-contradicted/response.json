@@ -1,0 +1,9 @@
+{
+  "id": "msg_narrative_contradicted",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "[{\"kind\":\"claim-contradicted\",\"story_slug\":\"widget-creation-returns-identifier\",\"detail\":\"The auditable claims use HTTP codes that contradict expected behavior.\"}]"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 30}
+}

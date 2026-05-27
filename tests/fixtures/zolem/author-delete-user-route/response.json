@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_delete_user_route",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"Client deletes user record\",\"slug\":\"client-deletes-user-record\",\"intent\":\"An API client needs to remove user records that are no longer needed.\",\"story\":\"The client sends a delete request for a user identifier.\",\"expected_behavior\":\"The API deletes the target user and returns a completion response.\",\"boundaries\":\"This story does not cover authorization rules.\",\"auditable_claims\":[\"The delete user route is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"route: DELETE /api/users/:id\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

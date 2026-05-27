@@ -1,0 +1,9 @@
+{
+  "id": "msg_narrative_untested",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "[{\"kind\":\"documented-untested\",\"story_slug\":\"batch-import-processes-csv-files\",\"detail\":\"The story documents CSV processing behavior without test evidence.\"}]"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 30}
+}

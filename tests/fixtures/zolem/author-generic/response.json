@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_generic",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"User uses discovered surface\",\"slug\":\"user-uses-discovered-surface\",\"intent\":\"A user needs access to a discovered project capability.\",\"story\":\"The user invokes the surfaced workflow.\",\"expected_behavior\":\"The software completes the requested workflow and reports the result.\",\"boundaries\":\"This story does not cover adjacent administration tasks.\",\"auditable_claims\":[\"The discovered surface is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

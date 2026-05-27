@@ -1,0 +1,4 @@
+id: author-login
+provider: anthropic
+version: v1
+status: 200

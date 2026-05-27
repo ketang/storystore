@@ -1,0 +1,9 @@
+{
+  "id": "msg_evaluation_scores",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"candidate_quality\":{\"score\":4,\"issues\":[]},\"duplicate_avoidance\":{\"score\":4,\"issues\":[]},\"coverage_breadth\":{\"score\":4,\"issues\":[]},\"surface_appropriateness\":{\"score\":4,\"issues\":[]},\"intent_quality\":{\"score\":4,\"issues\":[]},\"effect_completeness\":{\"score\":4,\"issues\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

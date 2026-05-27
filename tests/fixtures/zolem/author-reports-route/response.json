@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_reports_route",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"Client lists available reports\",\"slug\":\"client-lists-available-reports\",\"intent\":\"An API client needs to discover report data available for review.\",\"story\":\"The client requests the reports endpoint.\",\"expected_behavior\":\"The API returns a list of reports.\",\"boundaries\":\"This story does not cover report generation.\",\"auditable_claims\":[\"The reports route is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"route: GET /api/reports\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

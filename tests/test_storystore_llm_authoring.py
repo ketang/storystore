@@ -1,9 +1,9 @@
-"""Opt-in LLM-backed tests for observed story authoring using local Ollama.
+"""Opt-in LLM-backed tests for observed story authoring using Zolem fixtures.
 
 These tests ask an LLM to author observed stories from deterministic candidates,
 then validate the resulting stories through write_story.py and stories-audit.
 
-All tests skip cleanly when Ollama is unavailable.
+All tests skip cleanly when Zolem is unavailable.
 
 Structural assertions are stored here; exact LLM output is not asserted.
 """
@@ -19,7 +19,8 @@ from typing import Any
 
 import pytest
 
-from .llm_provider import LLMProvider, OllamaProvider, get_provider, require_ollama
+from .conftest import require_zolem
+from .llm_provider import LLMProvider, OllamaProvider, ZolemProvider, get_provider
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WRITE_STORY_SCRIPT = REPO_ROOT / "shared" / "write_story.py"
@@ -109,12 +110,6 @@ DETERMINISTIC_CANDIDATES = [
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="module")
-def ollama_provider() -> OllamaProvider:
-    """Module-scoped fixture: skip entire module if Ollama unavailable."""
-    return require_ollama()
 
 
 @pytest.fixture
@@ -240,7 +235,7 @@ def _author_story(provider: LLMProvider, candidate: dict[str, Any]) -> dict[str,
             return _extract_json(response.text)
         except (ValueError, json.JSONDecodeError) as exc:
             last_exc = exc
-    pytest.skip(f"Ollama returned unparseable JSON after 3 attempts: {last_exc}")
+    pytest.skip(f"Zolem returned unparseable JSON after 3 attempts: {last_exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +250,11 @@ class TestProviderAbstraction:
         provider = get_provider("ollama")
         assert isinstance(provider, OllamaProvider)
         assert provider.name() == "ollama"
+
+    def test_get_provider_zolem(self):
+        provider = get_provider("zolem")
+        assert isinstance(provider, ZolemProvider)
+        assert provider.name() == "zolem"
 
     def test_get_provider_unknown_raises(self):
         with pytest.raises(ValueError, match="unknown LLM provider"):
@@ -272,27 +272,34 @@ class TestProviderAbstraction:
         provider = OllamaProvider(model="test-model:latest")
         assert provider._explicit_model == "test-model:latest"
 
+    def test_zolem_provider_defaults(self):
+        provider = ZolemProvider()
+        assert provider.admin_url == "http://127.0.0.1:18090"
+        assert provider.list_models() == ["zolem-fixture"]
+
 
 # ---------------------------------------------------------------------------
-# LLM authoring tests (require Ollama)
+# LLM authoring tests (require Zolem)
 # ---------------------------------------------------------------------------
 
 
 class TestLLMAuthoring:
     """Tests that use a real LLM to author stories from candidates."""
 
-    def test_llm_authors_valid_json(self, ollama_provider: OllamaProvider):
+    def test_llm_authors_valid_json(self, zolem_provider: ZolemProvider):
         """LLM produces parseable JSON with required fields."""
         candidate = DETERMINISTIC_CANDIDATES[0]
-        payload = _author_story(ollama_provider, candidate)
+        provider = require_zolem(zolem_provider)
+        payload = _author_story(provider, candidate)
         required_fields = {"title", "slug", "intent", "story", "expected_behavior"}
         missing = required_fields - set(payload.keys())
         assert not missing, f"LLM output missing fields: {missing}"
 
-    def test_llm_slug_is_valid_kebab_case(self, ollama_provider: OllamaProvider):
+    def test_llm_slug_is_valid_kebab_case(self, zolem_provider: ZolemProvider):
         """LLM-generated slug follows basic kebab-case format rules."""
         candidate = DETERMINISTIC_CANDIDATES[0]
-        payload = _author_story(ollama_provider, candidate)
+        provider = require_zolem(zolem_provider)
+        payload = _author_story(provider, candidate)
         slug = payload.get("slug", "")
         assert slug, "slug is empty"
         # Must be lowercase kebab-case characters only
@@ -308,11 +315,12 @@ class TestLLMAuthoring:
         )
 
     def test_llm_story_writes_via_write_story(
-        self, ollama_provider: OllamaProvider, story_repo: Path
+        self, zolem_provider: ZolemProvider, story_repo: Path
     ):
         """LLM-authored story passes through write_story.py successfully."""
         candidate = DETERMINISTIC_CANDIDATES[0]
-        payload = _author_story(ollama_provider, candidate)
+        provider = require_zolem(zolem_provider)
+        payload = _author_story(provider, candidate)
 
         # Ensure slug has enough words for write_story validation
         _fixup_slug(payload, "llm-authored-deploy-command")
@@ -331,11 +339,12 @@ class TestLLMAuthoring:
         assert story_path.exists(), f"story file not created at {story_path}"
 
     def test_llm_story_parses_with_storystore_lib(
-        self, ollama_provider: OllamaProvider, story_repo: Path
+        self, zolem_provider: ZolemProvider, story_repo: Path
     ):
         """Written LLM story parses correctly with storystore_lib."""
         candidate = DETERMINISTIC_CANDIDATES[1]  # health route
-        payload = _author_story(ollama_provider, candidate)
+        provider = require_zolem(zolem_provider)
+        payload = _author_story(provider, candidate)
 
         _fixup_slug(payload, "health-endpoint-returns-status")
 
@@ -352,11 +361,12 @@ class TestLLMAuthoring:
         assert parsed.status == "draft"
 
     def test_llm_story_passes_audit(
-        self, ollama_provider: OllamaProvider, story_repo: Path
+        self, zolem_provider: ZolemProvider, story_repo: Path
     ):
         """Written LLM story passes stories-audit without errors."""
         candidate = DETERMINISTIC_CANDIDATES[2]  # config-set
-        payload = _author_story(ollama_provider, candidate)
+        provider = require_zolem(zolem_provider)
+        payload = _author_story(provider, candidate)
 
         _fixup_slug(payload, "user-sets-configuration-values")
 
@@ -374,12 +384,11 @@ class TestLLMAuthoring:
             f"stdout: {audit_result.stdout}"
         )
 
-    def test_llm_observed_defaults_applied(
-        self, ollama_provider: OllamaProvider, story_repo: Path
-    ):
+    def test_llm_observed_defaults_applied(self, zolem_provider: ZolemProvider, story_repo: Path):
         """Observed mode defaults (authority, change_resistance) are applied."""
         candidate = DETERMINISTIC_CANDIDATES[0]
-        payload = _author_story(ollama_provider, candidate)
+        provider = require_zolem(zolem_provider)
+        payload = _author_story(provider, candidate)
 
         _fixup_slug(payload, "deploy-application-to-production")
 
@@ -398,12 +407,11 @@ class TestLLMAuthoring:
         assert data["change_resistance"] == "low"
         assert data["locked_sections"] == []
 
-    def test_llm_index_regenerated(
-        self, ollama_provider: OllamaProvider, story_repo: Path
-    ):
+    def test_llm_index_regenerated(self, zolem_provider: ZolemProvider, story_repo: Path):
         """INDEX.md is regenerated after LLM story is written."""
         candidate = DETERMINISTIC_CANDIDATES[1]
-        payload = _author_story(ollama_provider, candidate)
+        provider = require_zolem(zolem_provider)
+        payload = _author_story(provider, candidate)
 
         _fixup_slug(payload, "health-check-endpoint-responds")
 

@@ -1,7 +1,7 @@
 """LLM provider abstraction for opt-in LLM-backed tests.
 
-Provides a pluggable interface for LLM backends. Currently supports
-local Ollama only. Tests skip cleanly when Ollama is unavailable.
+Provides a pluggable interface for LLM backends. Tests skip cleanly when
+the configured provider is unavailable.
 """
 
 from __future__ import annotations
@@ -144,11 +144,71 @@ class OllamaProvider(LLMProvider):
         )
 
 
+class ZolemProvider(LLMProvider):
+    """Zolem fixture provider using an Anthropic-compatible listener."""
+
+    DEFAULT_ADMIN_URL = "http://127.0.0.1:18090"
+    FIXTURE_MODEL = "zolem-fixture"
+    ADMIN_TIMEOUT_SECONDS = 2
+    GENERATE_TIMEOUT_SECONDS = 10
+
+    def __init__(
+        self,
+        admin_url: str | None = None,
+        listener_base_url: str = "",
+    ):
+        self.admin_url = (admin_url or self.DEFAULT_ADMIN_URL).rstrip("/")
+        self.listener_base_url = listener_base_url.rstrip("/")
+
+    def name(self) -> str:
+        return "zolem"
+
+    def is_available(self) -> tuple[bool, str]:
+        try:
+            req = urllib.request.Request(f"{self.admin_url}/_zolem/profiles")
+            with urllib.request.urlopen(req, timeout=self.ADMIN_TIMEOUT_SECONDS) as resp:
+                if 200 <= resp.status < 300:
+                    return True, "zolem admin available"
+                return False, f"zolem admin returned HTTP {resp.status}"
+        except (urllib.error.URLError, OSError) as exc:
+            return False, str(exc)
+
+    def generate(self, prompt: str, *, system: str = "") -> LLMResponse:
+        if not self.listener_base_url:
+            raise RuntimeError("zolem listener base URL is not configured")
+        body: dict[str, Any] = {
+            "model": self.FIXTURE_MODEL,
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system:
+            body["system"] = system
+        req = urllib.request.Request(
+            f"{self.listener_base_url}/v1/messages",
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json", "x-api-key": "test-key"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=self.GENERATE_TIMEOUT_SECONDS) as resp:
+            data = json.loads(resp.read().decode())
+        return LLMResponse(
+            text=data["content"][0]["text"],
+            model=self.FIXTURE_MODEL,
+            provider="zolem",
+            raw=data,
+        )
+
+    def list_models(self) -> list[str]:
+        return [self.FIXTURE_MODEL]
+
+
 def get_provider(name: str = "ollama", **kwargs: Any) -> LLMProvider:
-    """Factory for LLM providers. Currently only 'ollama' is supported."""
+    """Factory for LLM providers."""
     if name == "ollama":
         return OllamaProvider(**kwargs)
-    raise ValueError(f"unknown LLM provider: {name!r}; supported: ollama")
+    if name == "zolem":
+        return ZolemProvider(**kwargs)
+    raise ValueError(f"unknown LLM provider: {name!r}; supported: ollama, zolem")
 
 
 def require_ollama() -> OllamaProvider:

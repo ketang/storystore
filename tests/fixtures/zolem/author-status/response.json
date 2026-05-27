@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_status",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"User checks deployment status\",\"slug\":\"user-checks-deployment-status\",\"intent\":\"A user needs a quick view of current deployment state.\",\"story\":\"The user runs the status command.\",\"expected_behavior\":\"The CLI prints the current service status.\",\"boundaries\":\"This story does not include detailed logs.\",\"auditable_claims\":[\"The status command is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"cli: status\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

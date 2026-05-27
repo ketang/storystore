@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_get_user_route",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"Client fetches user details\",\"slug\":\"client-fetches-user-details\",\"intent\":\"An API client needs to retrieve a specific user's current data.\",\"story\":\"The client requests a user by identifier.\",\"expected_behavior\":\"The API returns the matching user details.\",\"boundaries\":\"This story does not cover listing all users.\",\"auditable_claims\":[\"The get user route is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"route: GET /api/users/:id\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

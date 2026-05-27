@@ -1,0 +1,4 @@
+id: author-widgets-route
+provider: anthropic
+version: v1
+status: 200

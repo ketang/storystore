@@ -1,11 +1,11 @@
 """Opt-in qualitative acceptance tests for fresh-init observed stories.
 
 Run the full stories-init fresh-init flow against fixture repos with known
-user-facing surfaces, use local Ollama as an evaluator to score the generated
+user-facing surfaces, use Zolem fixtures as an evaluator to score the generated
 top-5 stories, and assert quality properties (count, uniqueness, structural
 fields, distinct capability coverage, unsupported-surface avoidance).
 
-All LLM-dependent tests skip cleanly when Ollama is unavailable.
+All LLM-dependent tests skip cleanly when Zolem is unavailable.
 Structural assertions are stored here; exact LLM text is not asserted.
 """
 
@@ -23,7 +23,8 @@ from typing import Any
 import pytest
 
 from .helpers import REPO_ROOT, copy_fixture, count_story_files
-from .llm_provider import OllamaProvider, require_ollama
+from .conftest import require_zolem
+from .llm_provider import LLMProvider, ZolemProvider
 
 WRITE_STORY_SCRIPT = REPO_ROOT / "shared" / "write_story.py"
 LIST_CANDIDATES_SCRIPT = REPO_ROOT / "shared" / "list_candidates.py"
@@ -193,7 +194,7 @@ def _list_candidates(repo_root: Path) -> list[dict[str, Any]]:
 
 
 def _select_top_candidates(
-    provider: OllamaProvider,
+    provider: LLMProvider,
     candidates: list[dict[str, Any]],
     count: int = 5,
 ) -> list[dict[str, Any]]:
@@ -247,7 +248,7 @@ def _select_top_candidates(
 
 
 def _author_story(
-    provider: OllamaProvider, candidate: dict[str, Any], retries: int = 2
+    provider: LLMProvider, candidate: dict[str, Any], retries: int = 2
 ) -> dict[str, Any]:
     """Ask the LLM to author a single observed story from a candidate.
 
@@ -306,7 +307,7 @@ def _make_slug_fallback(candidate: dict[str, Any], index: int) -> str:
 
 
 def _run_full_init_flow(
-    provider: OllamaProvider,
+    provider: LLMProvider,
     fixture_name: str,
     tmp_path: Path,
     story_count: int = 5,
@@ -357,17 +358,6 @@ def _run_full_init_flow(
 
 # ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="module")
-def ollama_provider() -> OllamaProvider:
-    """Module-scoped fixture: skip entire module if Ollama unavailable."""
-    return require_ollama()
-
-
-# ---------------------------------------------------------------------------
-# Deterministic tests (no LLM needed)
 # ---------------------------------------------------------------------------
 
 
@@ -470,7 +460,7 @@ class TestInitFlowDeterministic:
 
 
 # ---------------------------------------------------------------------------
-# Full init quality tests (require Ollama)
+# Full init quality tests (require Zolem)
 # ---------------------------------------------------------------------------
 
 
@@ -478,10 +468,11 @@ class TestInitQualityCli:
     """Quality tests running the full init flow against the CLI fixture."""
 
     @pytest.fixture(autouse=True)
-    def _run_init(self, ollama_provider: OllamaProvider, tmp_path: Path):
+    def _run_init(self, zolem_provider: ZolemProvider, tmp_path: Path):
         """Run the full init flow once for this test class."""
+        provider = require_zolem(zolem_provider)
         self.repo, self.candidates, self.written = _run_full_init_flow(
-            ollama_provider, CLI_FIXTURE, tmp_path, story_count=5,
+            provider, CLI_FIXTURE, tmp_path, story_count=5,
         )
         self.stories_dir = self.repo / "docs" / "stories"
 
@@ -493,7 +484,7 @@ class TestInitQualityCli:
     def test_stories_written(self):
         """At least one story was successfully written."""
         # This test validates the LLM can produce stories — skip is acceptable
-        # when Ollama's small model produces unparseable output.
+        # when the fixture provider is unavailable or returns no writable stories.
         self._require_written()
 
     def test_story_count_within_bounds(self):
@@ -567,9 +558,10 @@ class TestInitQualityApi:
     """Quality tests running the full init flow against the API fixture."""
 
     @pytest.fixture(autouse=True)
-    def _run_init(self, ollama_provider: OllamaProvider, tmp_path: Path):
+    def _run_init(self, zolem_provider: ZolemProvider, tmp_path: Path):
+        provider = require_zolem(zolem_provider)
         self.repo, self.candidates, self.written = _run_full_init_flow(
-            ollama_provider, API_FIXTURE, tmp_path, story_count=5,
+            provider, API_FIXTURE, tmp_path, story_count=5,
         )
         self.stories_dir = self.repo / "docs" / "stories"
 
@@ -600,18 +592,18 @@ class TestInitQualityApi:
 
 
 # ---------------------------------------------------------------------------
-# LLM-evaluated quality scoring (require Ollama)
+# LLM-evaluated quality scoring (require Zolem)
 # ---------------------------------------------------------------------------
 
 
 class TestInitQualityLLMEvaluation:
-    """Use Ollama as an evaluator to score the quality of generated stories."""
+    """Use Zolem as an evaluator to score the quality of generated stories."""
 
     @pytest.fixture(autouse=True)
-    def _run_init(self, ollama_provider: OllamaProvider, tmp_path: Path):
-        self.provider = ollama_provider
+    def _run_init(self, zolem_provider: ZolemProvider, tmp_path: Path):
+        self.provider = require_zolem(zolem_provider)
         self.repo, self.candidates, self.written = _run_full_init_flow(
-            ollama_provider, CLI_FIXTURE, tmp_path, story_count=5,
+            self.provider, CLI_FIXTURE, tmp_path, story_count=5,
         )
         self.stories_dir = self.repo / "docs" / "stories"
 
@@ -707,7 +699,7 @@ class TestInitQualityLLMEvaluation:
 
 
 # ---------------------------------------------------------------------------
-# Cross-fixture coverage tests (require Ollama)
+# Cross-fixture coverage tests (require Zolem)
 # ---------------------------------------------------------------------------
 
 
@@ -715,19 +707,20 @@ class TestInitQualityCrossFixture:
     """Verify distinct stories across different fixture types."""
 
     def test_different_fixtures_produce_different_stories(
-        self, ollama_provider: OllamaProvider, tmp_path: Path
+        self, zolem_provider: ZolemProvider, tmp_path: Path
     ):
         """Stories from CLI and API fixtures have no slug overlap."""
+        provider = require_zolem(zolem_provider)
         cli_dir = tmp_path / "cli-run"
         cli_dir.mkdir()
         api_dir = tmp_path / "api-run"
         api_dir.mkdir()
 
         _, _, cli_written = _run_full_init_flow(
-            ollama_provider, CLI_FIXTURE, cli_dir, story_count=3,
+            provider, CLI_FIXTURE, cli_dir, story_count=3,
         )
         _, _, api_written = _run_full_init_flow(
-            ollama_provider, API_FIXTURE, api_dir, story_count=3,
+            provider, API_FIXTURE, api_dir, story_count=3,
         )
 
         if not cli_written or not api_written:
@@ -738,19 +731,20 @@ class TestInitQualityCrossFixture:
         assert not overlap, f"Slug overlap between fixtures: {overlap}"
 
     def test_stories_cover_different_kinds(
-        self, ollama_provider: OllamaProvider, tmp_path: Path
+        self, zolem_provider: ZolemProvider, tmp_path: Path
     ):
         """Stories across fixtures cover different surface kinds."""
+        provider = require_zolem(zolem_provider)
         cli_dir = tmp_path / "cli-kinds"
         cli_dir.mkdir()
         api_dir = tmp_path / "api-kinds"
         api_dir.mkdir()
 
         _, _, cli_written = _run_full_init_flow(
-            ollama_provider, CLI_FIXTURE, cli_dir, story_count=3,
+            provider, CLI_FIXTURE, cli_dir, story_count=3,
         )
         _, _, api_written = _run_full_init_flow(
-            ollama_provider, API_FIXTURE, api_dir, story_count=3,
+            provider, API_FIXTURE, api_dir, story_count=3,
         )
 
         if not cli_written or not api_written:

@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_create_user_route",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"Client creates user record\",\"slug\":\"client-creates-user-record\",\"intent\":\"An API client needs to add users through the service API.\",\"story\":\"The client posts user details to the users endpoint.\",\"expected_behavior\":\"The API creates the user and returns the new record.\",\"boundaries\":\"This story does not cover updating users.\",\"auditable_claims\":[\"The create user route is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"route: POST /api/users\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

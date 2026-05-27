@@ -97,8 +97,6 @@ MIGRATION_GLOB_PATTERNS: tuple[str, ...] = (
 # Regex for validating a schema ref: table.column
 _SCHEMA_REF_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$")
 
-<<<<<<< HEAD
-=======
 # Regex for validating a flag ref: bare identifier (letters, digits, underscores, hyphens)
 _FLAG_REF_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]*$")
 
@@ -127,7 +125,6 @@ def _flag_definition_patterns(identifier: str) -> list[re.Pattern[str]]:
 # File must end with .json, .yaml, or .yml; key is a dot-separated path.
 _COPY_REF_RE = re.compile(r"^(?P<file>[^\s#]+\.(?:json|ya?ml))#(?P<key>[a-zA-Z_][a-zA-Z0-9_.]*[a-zA-Z0-9_])$")
 
->>>>>>> caae7a2 (Add copy evidence kind with locale file resolver)
 
 # --------------------------------------------------------------------------- #
 # Regexes
@@ -389,13 +386,10 @@ def _validate_surface_ref(ref: str) -> bool:
         return bool(rest)
     if prefix == "schema":
         return bool(_SCHEMA_REF_RE.match(rest))
-<<<<<<< HEAD
-=======
     if prefix == "flag":
         return bool(_FLAG_REF_RE.match(rest))
     if prefix == "copy":
         return bool(_COPY_REF_RE.match(rest))
->>>>>>> caae7a2 (Add copy evidence kind with locale file resolver)
     # Unknown prefix.
     return False
 
@@ -504,8 +498,6 @@ def _resolve_schema_ref(
     return best_match
 
 
-<<<<<<< HEAD
-=======
 def _resolve_flag_ref(
     repo_root: Path, identifier: str
 ) -> Optional[dict[str, Any]]:
@@ -697,7 +689,6 @@ def _find_key_line(text: str, keys: list[str], suffix: str) -> int:
         return last_line
 
 
->>>>>>> caae7a2 (Add copy evidence kind with locale file resolver)
 def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
     """Resolve a story's declared evidence refs against the repo.
 
@@ -754,8 +745,6 @@ def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
             else:
                 schema_missing.append(ref)
 
-<<<<<<< HEAD
-=======
     # Flag evidence resolution.
     flag_resolved: list[dict[str, Any]] = []
     flag_missing: list[str] = []
@@ -790,7 +779,6 @@ def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
         else:
             copy_missing.append(ref)
 
->>>>>>> caae7a2 (Add copy evidence kind with locale file resolver)
     return {
         "tests_resolved": tests_resolved,
         "tests_missing": tests_missing,
@@ -799,13 +787,10 @@ def resolve_evidence(repo_root: Path, story: Any) -> dict[str, Any]:
         "docs_missing": docs_missing,
         "schema_resolved": schema_resolved,
         "schema_missing": schema_missing,
-<<<<<<< HEAD
-=======
         "flag_resolved": flag_resolved,
         "flag_missing": flag_missing,
         "copy_resolved": copy_resolved,
         "copy_missing": copy_missing,
->>>>>>> caae7a2 (Add copy evidence kind with locale file resolver)
     }
 
 

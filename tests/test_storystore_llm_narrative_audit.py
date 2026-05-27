@@ -1,10 +1,10 @@
-"""Opt-in LLM-backed tests for narrative audit findings (D-pass) using local Ollama.
+"""Opt-in LLM-backed tests for narrative audit findings (D-pass) using Zolem fixtures.
 
 These tests ask an LLM to evaluate story prose for ambiguity, contradictions,
 and unsupported claims against fixture repos. They validate that the LLM can
 identify narrative quality issues that deterministic passes cannot catch.
 
-All tests skip cleanly when Ollama is unavailable.
+All tests skip cleanly when Zolem is unavailable.
 
 Structural assertions check finding kinds and story slugs — not exact wording,
 since LLM output is non-deterministic.
@@ -19,7 +19,8 @@ from typing import Any
 
 import pytest
 
-from .llm_provider import LLMResponse, OllamaProvider, require_ollama
+from .conftest import require_zolem
+from .llm_provider import LLMResponse, ZolemProvider
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -223,57 +224,6 @@ CLEAN_STORY = textwrap.dedent("""\
 # ---------------------------------------------------------------------------
 
 
-# Models too small for narrative reasoning (< ~2B params).
-_TOO_SMALL_SUFFIXES = (":1b", ":0.5b", ":mini")
-
-# Preferred models for narrative audit — larger models first.
-_NARRATIVE_PREFERRED = (
-    "gemma4:e4b",
-    "llama3.1",
-    "llama3.2",
-    "gemma3:4b",
-    "gemma3",
-    "gemma2",
-    "mistral",
-    "phi3",
-)
-
-
-def _require_narrative_provider() -> OllamaProvider:
-    """Return an OllamaProvider with a model capable of narrative reasoning.
-
-    Prefers larger models for this task. Skips if only very small models
-    are available.
-    """
-    provider = require_ollama()
-    models = provider.list_models()
-
-    # Try to find a preferred model
-    for preferred in _NARRATIVE_PREFERRED:
-        for available in models:
-            if available == preferred or available.startswith(preferred + ":"):
-                return OllamaProvider(model=available)
-
-    # Filter out known-too-small models
-    viable = [
-        m for m in models
-        if not any(m.endswith(s) for s in _TOO_SMALL_SUFFIXES)
-    ]
-    if viable:
-        return OllamaProvider(model=viable[0])
-
-    pytest.skip(
-        f"No model large enough for narrative reasoning; "
-        f"available: {models}"
-    )
-
-
-@pytest.fixture(scope="module")
-def ollama_provider() -> OllamaProvider:
-    """Module-scoped fixture: skip if Ollama unavailable or model too small."""
-    return _require_narrative_provider()
-
-
 @pytest.fixture
 def ambiguous_repo(tmp_path: Path) -> Path:
     """Fixture repo containing a deliberately ambiguous story."""
@@ -396,7 +346,7 @@ def _extract_findings(text: str) -> list[dict[str, Any]]:
 
 
 def _run_narrative_audit(
-    provider: OllamaProvider,
+    provider: ZolemProvider,
     story_text: str,
     *,
     tests_declared: list[str] | None = None,
@@ -510,7 +460,7 @@ class TestFixtureStoryContent:
 
 
 # ---------------------------------------------------------------------------
-# LLM narrative audit tests (require Ollama)
+# LLM narrative audit tests (require Zolem)
 # ---------------------------------------------------------------------------
 
 
@@ -518,16 +468,17 @@ class TestLLMNarrativeAuditAmbiguous:
     """LLM detects ambiguity in deliberately vague story prose."""
 
     def test_ambiguous_story_produces_findings(
-        self, ollama_provider: OllamaProvider, ambiguous_repo: Path
+        self, zolem_provider: ZolemProvider, ambiguous_repo: Path
     ):
         """LLM identifies narrative issues in a vague story."""
+        provider = require_zolem(zolem_provider)
         findings, response = _run_narrative_audit(
-            ollama_provider,
+            provider,
             AMBIGUOUS_STORY,
             surfaces_declared=["cli: export"],
         )
         assert response.model, "response should include model name"
-        assert response.provider == "ollama"
+        assert response.provider == "zolem"
         # LLM should find at least one issue with the vague story
         assert len(findings) > 0, (
             f"Expected findings for ambiguous story, got none. "
@@ -535,11 +486,12 @@ class TestLLMNarrativeAuditAmbiguous:
         )
 
     def test_ambiguous_findings_have_valid_kinds(
-        self, ollama_provider: OllamaProvider, ambiguous_repo: Path
+        self, zolem_provider: ZolemProvider, ambiguous_repo: Path
     ):
         """All findings from ambiguous story use valid finding kinds."""
+        provider = require_zolem(zolem_provider)
         findings, _ = _run_narrative_audit(
-            ollama_provider,
+            provider,
             AMBIGUOUS_STORY,
             surfaces_declared=["cli: export"],
         )
@@ -550,11 +502,12 @@ class TestLLMNarrativeAuditAmbiguous:
             )
 
     def test_ambiguous_findings_reference_correct_slug(
-        self, ollama_provider: OllamaProvider, ambiguous_repo: Path
+        self, zolem_provider: ZolemProvider, ambiguous_repo: Path
     ):
         """Findings reference the correct story slug."""
+        provider = require_zolem(zolem_provider)
         findings, _ = _run_narrative_audit(
-            ollama_provider,
+            provider,
             AMBIGUOUS_STORY,
             surfaces_declared=["cli: export"],
         )
@@ -564,11 +517,12 @@ class TestLLMNarrativeAuditAmbiguous:
             )
 
     def test_ambiguous_story_includes_story_ambiguous_kind(
-        self, ollama_provider: OllamaProvider, ambiguous_repo: Path
+        self, zolem_provider: ZolemProvider, ambiguous_repo: Path
     ):
         """LLM should identify story-ambiguous issues in vague prose."""
+        provider = require_zolem(zolem_provider)
         findings, response = _run_narrative_audit(
-            ollama_provider,
+            provider,
             AMBIGUOUS_STORY,
             surfaces_declared=["cli: export"],
         )
@@ -583,11 +537,12 @@ class TestLLMNarrativeAuditContradicted:
     """LLM detects contradictions between claims and expected behavior."""
 
     def test_contradicted_story_produces_findings(
-        self, ollama_provider: OllamaProvider, contradicted_repo: Path
+        self, zolem_provider: ZolemProvider, contradicted_repo: Path
     ):
         """LLM identifies contradictions in mismatched story claims."""
+        provider = require_zolem(zolem_provider)
         findings, response = _run_narrative_audit(
-            ollama_provider,
+            provider,
             CONTRADICTED_STORY,
             tests_declared=["tests/test_widgets.py"],
             surfaces_declared=["route: POST /widgets"],
@@ -599,11 +554,12 @@ class TestLLMNarrativeAuditContradicted:
         )
 
     def test_contradicted_findings_include_claim_contradicted(
-        self, ollama_provider: OllamaProvider, contradicted_repo: Path
+        self, zolem_provider: ZolemProvider, contradicted_repo: Path
     ):
         """LLM should find claim-contradicted issues for mismatched HTTP codes."""
+        provider = require_zolem(zolem_provider)
         findings, response = _run_narrative_audit(
-            ollama_provider,
+            provider,
             CONTRADICTED_STORY,
             tests_declared=["tests/test_widgets.py"],
             surfaces_declared=["route: POST /widgets"],
@@ -616,11 +572,12 @@ class TestLLMNarrativeAuditContradicted:
         )
 
     def test_contradicted_findings_reference_correct_slug(
-        self, ollama_provider: OllamaProvider, contradicted_repo: Path
+        self, zolem_provider: ZolemProvider, contradicted_repo: Path
     ):
         """Findings reference the correct story slug."""
+        provider = require_zolem(zolem_provider)
         findings, _ = _run_narrative_audit(
-            ollama_provider,
+            provider,
             CONTRADICTED_STORY,
             tests_declared=["tests/test_widgets.py"],
             surfaces_declared=["route: POST /widgets"],
@@ -636,11 +593,12 @@ class TestLLMNarrativeAuditUntested:
     """LLM detects documented behavior with no test evidence."""
 
     def test_untested_story_produces_findings(
-        self, ollama_provider: OllamaProvider, untested_repo: Path
+        self, zolem_provider: ZolemProvider, untested_repo: Path
     ):
         """LLM identifies missing test coverage for documented behavior."""
+        provider = require_zolem(zolem_provider)
         findings, response = _run_narrative_audit(
-            ollama_provider,
+            provider,
             UNTESTED_STORY,
             surfaces_declared=["cli: import"],
         )
@@ -650,11 +608,12 @@ class TestLLMNarrativeAuditUntested:
         )
 
     def test_untested_findings_include_documented_untested(
-        self, ollama_provider: OllamaProvider, untested_repo: Path
+        self, zolem_provider: ZolemProvider, untested_repo: Path
     ):
         """LLM should find documented-untested issues when no tests declared."""
+        provider = require_zolem(zolem_provider)
         findings, response = _run_narrative_audit(
-            ollama_provider,
+            provider,
             UNTESTED_STORY,
             surfaces_declared=["cli: import"],
         )
@@ -669,11 +628,12 @@ class TestLLMNarrativeAuditClean:
     """LLM finds no issues in a well-written story."""
 
     def test_clean_story_produces_few_or_no_findings(
-        self, ollama_provider: OllamaProvider, clean_repo: Path
+        self, zolem_provider: ZolemProvider, clean_repo: Path
     ):
         """Well-written story with full evidence should produce minimal findings."""
+        provider = require_zolem(zolem_provider)
         findings, response = _run_narrative_audit(
-            ollama_provider,
+            provider,
             CLEAN_STORY,
             tests_declared=["tests/test_health.py"],
             surfaces_declared=["route: GET /health"],
@@ -688,11 +648,12 @@ class TestLLMNarrativeAuditClean:
         )
 
     def test_clean_story_findings_have_valid_structure(
-        self, ollama_provider: OllamaProvider, clean_repo: Path
+        self, zolem_provider: ZolemProvider, clean_repo: Path
     ):
         """Any findings from clean story still have valid structure."""
+        provider = require_zolem(zolem_provider)
         findings, _ = _run_narrative_audit(
-            ollama_provider,
+            provider,
             CLEAN_STORY,
             tests_declared=["tests/test_health.py"],
             surfaces_declared=["route: GET /health"],
@@ -707,38 +668,36 @@ class TestLLMNarrativeAuditClean:
 class TestLLMNarrativeAuditResponseMetadata:
     """Verify response metadata for reproducibility."""
 
-    def test_response_includes_model_name(
-        self, ollama_provider: OllamaProvider
-    ):
+    def test_response_includes_model_name(self, zolem_provider: ZolemProvider):
         """LLM response includes model name for reproducibility."""
+        provider = require_zolem(zolem_provider)
         _, response = _run_narrative_audit(
-            ollama_provider,
+            provider,
             CLEAN_STORY,
             tests_declared=["tests/test_health.py"],
             surfaces_declared=["route: GET /health"],
             tests_resolved=["tests/test_health.py"],
         )
         assert response.model, "model name must be non-empty"
-        assert response.provider == "ollama"
+        assert response.provider == "zolem"
 
-    def test_response_includes_raw_data(
-        self, ollama_provider: OllamaProvider
-    ):
+    def test_response_includes_raw_data(self, zolem_provider: ZolemProvider):
         """LLM response includes raw API response for debugging."""
+        provider = require_zolem(zolem_provider)
         _, response = _run_narrative_audit(
-            ollama_provider,
+            provider,
             CLEAN_STORY,
             tests_declared=["tests/test_health.py"],
             surfaces_declared=["route: GET /health"],
             tests_resolved=["tests/test_health.py"],
         )
         assert isinstance(response.raw, dict)
-        # Ollama responses include timing metadata
-        assert "total_duration" in response.raw or "response" in response.raw
+        assert response.raw["type"] == "message"
 
-    def test_prompt_version_logged(self, ollama_provider: OllamaProvider):
+    def test_prompt_version_logged(self, zolem_provider: ZolemProvider):
         """Prompt version is available for reproducibility tracking."""
         # This test verifies the metadata is accessible; in a real pipeline,
         # this would be logged alongside test results.
+        provider = require_zolem(zolem_provider)
         assert PROMPT_VERSION.startswith("narrative-audit-")
-        assert ollama_provider.name() == "ollama"
+        assert provider.name() == "zolem"

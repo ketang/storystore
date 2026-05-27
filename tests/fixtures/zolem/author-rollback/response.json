@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_rollback",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"User rolls back release\",\"slug\":\"user-rolls-back-release\",\"intent\":\"A release operator needs to recover from a bad deployment.\",\"story\":\"The user runs the rollback command.\",\"expected_behavior\":\"The CLI reverts to a prior release and reports the result.\",\"boundaries\":\"This story does not cover initial deployment.\",\"auditable_claims\":[\"The rollback command is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"cli: rollback\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

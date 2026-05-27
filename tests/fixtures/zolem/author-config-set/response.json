@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_config_set",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"User updates configuration\",\"slug\":\"user-updates-configuration-values\",\"intent\":\"A user needs to persist project settings from the command line.\",\"story\":\"The user runs config-set with a setting name and value.\",\"expected_behavior\":\"The CLI records the new value and confirms the update.\",\"boundaries\":\"This story does not cover secret storage.\",\"auditable_claims\":[\"The config-set command is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"cli: config-set\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

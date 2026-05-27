@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_create_widget_route",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"Client creates widget record\",\"slug\":\"client-creates-widget-record\",\"intent\":\"An API client needs to add widgets through the service API.\",\"story\":\"The client posts widget details to the widgets endpoint.\",\"expected_behavior\":\"The API creates the widget and returns the new record.\",\"boundaries\":\"This story does not cover listing widgets.\",\"auditable_claims\":[\"The create widget route is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"route: POST /api/widgets\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}

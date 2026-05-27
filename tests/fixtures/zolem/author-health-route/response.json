@@ -1,0 +1,9 @@
+{
+  "id": "msg_author_health_route",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "{\"title\":\"Operator checks service health\",\"slug\":\"operator-checks-service-health\",\"intent\":\"An operator needs to confirm that the service is responding.\",\"story\":\"The operator calls the health endpoint.\",\"expected_behavior\":\"The endpoint returns a success response with health status.\",\"boundaries\":\"This story does not verify downstream dependencies.\",\"auditable_claims\":[\"The health endpoint is user-facing.\"],\"evidence\":{\"tests\":[],\"surface\":[\"route: GET /api/health\"],\"docs\":[]}}"}],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 10, "output_tokens": 50}
+}
