@@ -123,6 +123,12 @@ disclaimers.
 - `skill: example`
 ### Docs
 - `README.md`
+### Schema
+- `users.email`
+### Copy
+- `locales/en/messages.json#errors.permission_denied`
+### Flag
+- `experimental_collab`
 
 ## Drift Notes
 Optional. Pointers to tracker issues or known unresolved mismatches.
@@ -130,6 +136,27 @@ Optional. Pointers to tracker issues or known unresolved mismatches.
 
 The bar to *create* a story is just frontmatter + Intent. Audit and coverage
 do what they can with what is present. Sparse drafts remain allowed.
+
+Evidence subsections are parsed by heading name. `Tests`, `Surface`, `Docs`,
+`Schema`, `Copy`, and `Flag` are supported; `Flags` is accepted as an alias
+for `Flag`.
+
+Schema evidence uses `<table>.<column>`. The resolver searches migration
+files for the most recent definition or alteration that mentions the table and
+column together, then returns the migration file and line. Missing or malformed
+schema refs emit `schema-evidence-missing`.
+
+Copy evidence uses `<locale-file>#<key.path>`. The resolver reads JSON
+locale files, plus the bundled minimal YAML subset for `.yaml` and `.yml`
+files, and follows the dot-separated key path to return the locale file and
+line. Missing files, malformed locale files, missing keys, or malformed refs
+emit `copy-evidence-missing`.
+
+Flag evidence uses `<identifier>`. The resolver searches source and
+configuration files for common flag-definition shapes, including Ruby
+`feature_flag`/`feature`/`flag` calls, Python/JavaScript/TypeScript object or
+dictionary keys, and YAML keys, then returns the first matching file and line.
+Missing or malformed flag refs emit `flag-evidence-missing`.
 
 A high-quality story should mention meaningful edge cases and failure modes
 when they are known from human acceptance or inferable from deterministic
@@ -306,12 +333,16 @@ Emitted by `stories-audit`.
 
 ### Deterministic
 
-| Kind                     | When emitted                                                            |
-|--------------------------|--------------------------------------------------------------------------|
-| `surface-missing`        | Declared `Evidence.Surface` ref does not resolve.                        |
-| `test-evidence-missing`  | Declared `Evidence.Tests` ref does not resolve.                          |
-| `claim-unsupported`      | Auditable claim has no deterministic evidence support.                   |
-| `intent-conflict`        | Declared Intent contradicts deterministic evidence (severity fixed high). |
+| Kind                      | When emitted                                                            |
+|---------------------------|--------------------------------------------------------------------------|
+| `surface-missing`         | Declared `Evidence.Surface` ref does not resolve.                        |
+| `test-evidence-missing`   | Declared `Evidence.Tests` ref does not resolve.                          |
+| `doc-evidence-missing`    | Declared `Evidence.Docs` ref does not resolve.                           |
+| `schema-evidence-missing` | Declared `Evidence.Schema` ref does not resolve.                        |
+| `copy-evidence-missing`   | Declared `Evidence.Copy` ref does not resolve.                           |
+| `flag-evidence-missing`   | Declared `Evidence.Flag` ref does not resolve.                           |
+| `claim-unsupported`       | Auditable claim has no deterministic evidence support.                   |
+| `intent-conflict`         | Declared Intent contradicts deterministic evidence (severity fixed high). |
 
 ### Narrative (D-pass, opt-in, agent-emitted)
 
@@ -339,6 +370,9 @@ immutable -> high (flagged)
 ```
 
 Fixed: `intent-conflict` is high; `agent-pointer-missing` is low.
+The schema, copy, and flag missing-evidence findings use the same
+`change_resistance`-derived severity as other deterministic evidence findings;
+they do not add severity exceptions.
 
 ### Common Finding Shape
 
@@ -398,6 +432,10 @@ Boundaries:         <10 / 10-19 / >=20 words
 Auditable Claims:   1 / 2 / >=3 bullets
 Evidence:           1 / 2 / >=3 refs OR refs in >=2 subsections
 ```
+
+Evidence refs include `Tests`, `Surface`, `Docs`, `Schema`, `Copy`, and
+`Flag`/`Flags` subsections. Schema, copy, and flag refs count toward the same
+Evidence completeness dimension as test, surface, and docs refs.
 
 Score 0–50 maps to ratings:
 
