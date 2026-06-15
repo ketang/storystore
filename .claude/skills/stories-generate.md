@@ -216,3 +216,11 @@ wholesale-regenerates `docs/stories/INDEX.md` after a successful write.
 Review the diff, rebuild generated plugin/docs outputs when the repo
 tracks them, run the selected verification command, and report the
 branch/worktree, tracker item, and verification result.
+
+**Commit the new story.** Stories are durable repo artifacts, not scratch
+output. Commit the new `docs/stories/<slug>.md` and the regenerated
+`docs/stories/INDEX.md` on the current branch so the work is tracked
+rather than left untracked. Do not commit `docs/stories/drift-todo.md` (it
+is gitignored). Branch and worktree conventions belong to the host repo's
+workflow and are out of scope here — commit on whatever branch the
+generate ran on.

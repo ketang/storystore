@@ -173,3 +173,22 @@ Record any follow-up work in the repo tracker. Use
 Review the diff, rebuild generated plugin/docs outputs when the repo
 tracks them, run the selected verification command, and report the
 branch/worktree, tracker item, and verification result.
+
+**Verify the gitignore change landed.** Phase 1 appends
+`docs/stories/drift-todo.md` to `.gitignore`. Confirm that entry is
+actually present before finishing — a fresh init that reports
+`gitignore_updated: true` but leaves no entry in `.gitignore` is a
+failure to fix, not to ignore:
+
+```bash
+grep -qxF 'docs/stories/drift-todo.md' .gitignore
+```
+
+If the entry is missing, re-run Phase 1 or add it before committing.
+
+**Commit the new artifacts.** Stories are durable repo artifacts, not
+scratch output. Commit `docs/stories/` and the `.gitignore` change on the
+current branch so the seeded stories are tracked rather than left
+untracked. Do not commit `docs/stories/drift-todo.md` (it is gitignored).
+Branch and worktree conventions belong to the host repo's workflow and are
+out of scope here — commit on whatever branch the init ran on.
