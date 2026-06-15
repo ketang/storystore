@@ -218,6 +218,21 @@ For multiple edits to the same story, repeat from step 5 (lock check) for
 each section. For edits to a different story, restart from step 2 (scoped
 audit).
 
+## Finish
+
+Review the diff, rebuild generated plugin/docs outputs when the repo
+tracks them, run the selected verification command, and report the
+branch/worktree, tracker item, and verification result.
+
+**Commit the edited story.** Stories are durable repo artifacts, not
+scratch output. Commit the edited `docs/stories/<slug>.md` (and the
+regenerated `docs/stories/INDEX.md` when title, status, authority, or
+change_resistance changed) on the current branch so the edit is tracked
+rather than left untracked. Do not commit `docs/stories/drift-todo.md` (it
+is gitignored). Branch and worktree conventions belong to the host repo's
+workflow and are out of scope here — commit on whatever branch the update
+ran on.
+
 ## Structural Backstops
 
 These are enforced by `edit_section.py` regardless of the honor-system
