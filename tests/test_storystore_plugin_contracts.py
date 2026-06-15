@@ -447,3 +447,46 @@ class TestCrossPlatformConsistency:
         assert claude == codex, (
             f"skill {skill} differs between Claude and Codex payloads"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 5. Release readiness — no unimplemented-stub language in any skill
+# ═══════════════════════════════════════════════════════════════════
+
+# Phrases that mark a skill as a not-yet-implemented stub. A canonical
+# SKILL.md carrying any of these tells a reading agent the capability
+# does not exist and to stop — even when the backing script ships. Block
+# publish until the SKILL.md documents real invocation instead.
+FORBIDDEN_STUB_PHRASES = (
+    "deferred",
+    "not implemented",
+    "not yet implemented",
+    "implementation deferred",
+    "todo: implement",
+)
+
+
+class TestNoStubLanguageInSkills:
+    """Release gate: published SKILL.md files must not advertise themselves
+    as unimplemented stubs."""
+
+    @pytest.mark.parametrize("skill", EXPECTED_SKILLS)
+    def test_canonical_skill_has_no_stub_phrase(self, skill):
+        text = (REPO_ROOT / "skills" / skill / "SKILL.md").read_text().lower()
+        hits = [p for p in FORBIDDEN_STUB_PHRASES if p in text]
+        assert not hits, (
+            f"skills/{skill}/SKILL.md contains stub language {hits}; "
+            "rewrite with real invocation instructions before publishing"
+        )
+
+    def test_all_canonical_skills_scanned(self):
+        """Guard against the scan silently covering nothing if the skills
+        directory layout changes."""
+        scanned = [
+            s for s in EXPECTED_SKILLS
+            if (REPO_ROOT / "skills" / s / "SKILL.md").exists()
+        ]
+        assert scanned == EXPECTED_SKILLS, (
+            f"missing canonical SKILL.md for: "
+            f"{set(EXPECTED_SKILLS) - set(scanned)}"
+        )
