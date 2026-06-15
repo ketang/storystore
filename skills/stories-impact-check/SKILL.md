@@ -1,20 +1,35 @@
 ---
 name: stories-impact-check
 description: |
-  Hard trigger — before any behavioral change to user-facing surfaces, run
-  this skill. Finds stories affected by planned file, surface, or behavior
-  changes and reports their status, authority, change resistance, locked
-  sections, and intent excerpt so the agent can alert the user before
-  proceeding. Read-only.
+  Hard trigger when docs/stories/INDEX.md exists — before any behavioral
+  change to user-facing surfaces, run this skill. Finds stories affected by
+  planned file, surface, or behavior changes and reports their status,
+  authority, change resistance, locked sections, and intent excerpt so the
+  agent can alert the user before proceeding. Skip when the repo has no
+  docs/stories/INDEX.md. Read-only.
 ---
 
 # stories-impact-check
 
 Answers: **which active stories does this planned behavioral change affect?**
 
-This skill is a hard trigger. Run it before any behavioral change to a
-user-facing surface — endpoints, CLI commands, UI flows, public library APIs,
-observable error messages, or anything else a user can directly perceive.
+This skill is a hard trigger **in repos that have a story corpus**. Run it
+before any behavioral change to a user-facing surface — endpoints, CLI
+commands, UI flows, public library APIs, observable error messages, or
+anything else a user can directly perceive.
+
+## Existence Gate
+
+The hard trigger is gated on `docs/stories/INDEX.md` existing. If the repo
+has no `docs/stories/INDEX.md`, this skill has nothing to gate — skip it and
+proceed with the change. Do not invoke it in repos that have not run
+`stories-init`.
+
+Note that a corpus can exist yet gate nothing: a freshly seeded corpus
+contains only `authority: observed` stories, which are informational and
+never block (see the Agent Behavior Table). Gating becomes active only once
+stories are promoted `observed → accepted` via human review — see the
+promotion path documented in `stories-init`.
 
 The skill is **read-only**. It inspects `docs/stories/` and surface inventory
 under the repo root; it never edits, creates, or deletes story files. Use

@@ -152,6 +152,40 @@ Run Phase 2 only when the Phase 1 output reports `fresh_init: true`.
    `change_resistance=low`, `locked_sections=[]`. `authority: observed`
    with `change_resistance` in `{high, immutable}` exits 3.
 
+## Promotion Path: Observed → Accepted
+
+Seeded stories are written with `authority: observed` — they record what the
+software does today, not committed intent. **Observed stories never gate.**
+`stories-impact-check` reports them as informational context but never blocks
+a change, regardless of `change_resistance`.
+
+This is deliberate, but it has a consequence worth stating plainly at init
+time: **until at least one story is promoted to `accepted`, the
+`stories-impact-check` hard trigger is inert** — it can fire, but it has
+nothing to gate. A corpus left entirely in `observed` authority taxes every
+edit (the agent runs the check) while never protecting anything, and agents
+learn to ignore it.
+
+To make the corpus gate, promote reviewed stories `observed → accepted`:
+
+1. A human reads the observed story and confirms it describes *intended*
+   behavior, not merely current behavior.
+2. Run `stories-update` on that story and apply an `authority-change` edit
+   (observed → accepted). This requires explicit user approval — it is a
+   meaning change, never agent-initiated.
+3. Promote `status: draft → active` (seeded stories default to `draft`, and
+   a draft gates only at `high`/`immutable` resistance), and set a
+   `change_resistance` appropriate to how protected the behavior is
+   (`low`/`medium`/`high`/`immutable`). Per the `stories-impact-check` Agent
+   Behavior Table, only `accepted` + `active` stories gate, and only at
+   `change_resistance` `medium` or above; `low`-resistance stories remain
+   informational and do not block.
+
+Tell the user this at the end of a fresh init: the seeded corpus is a
+starting point that does not yet gate anything, and the next step — when they
+are ready — is human review and promotion of the stories that capture real
+intent.
+
 ## Follow-Up
 
 After Phase 2 completes, offer this pointer for each detected
