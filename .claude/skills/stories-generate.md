@@ -56,7 +56,7 @@ Run with `--interview`. Conduct a short interview with the user:
    `Expected Behavior` and exclusions or known non-promises in
    `Boundaries`. Do not invent failure modes the user has not accepted.
 
-Pipe the resulting JSON to `write_story.py --interview`.
+Pipe the resulting JSON to `write_story.py --interview --verify`.
 
 Interview defaults: `status=draft`, `authority=accepted`,
 `change_resistance=medium`, `locked_sections=[Intent]`.
@@ -89,7 +89,7 @@ story).
 
 4. **Run the Draft Story Evaluation gate** (see below) before writing.
 
-5. **Write passing drafts** with `write_story.py --observed`.
+5. **Write passing drafts** with `write_story.py --observed --verify`.
 
 Observed defaults: `status=draft`, `authority=observed`,
 `change_resistance=low`, `locked_sections=[]`.
@@ -186,8 +186,20 @@ an authored story are subtracted from output.
 `write_story.py`:
 
 ```bash
-python3 "$STORYSTORE_SHARED/write_story.py" --repo-root <repo-root> [--interview | --observed]
+python3 "$STORYSTORE_SHARED/write_story.py" --repo-root <repo-root> [--interview | --observed] --verify
 ```
+
+Always pass `--verify` when authoring a real story. It deterministically
+resolves each evidence ref against the repo before writing. A ref that is
+mechanically checkable but fails to resolve — a fabricated endpoint, or a
+route written without its mount prefix — and any ref outside deterministic
+reach (a name/text-based `test:`/`heading:` surface ref) is quarantined
+under a `### <Kind> (unverified)` heading instead of being written as clean
+evidence, and is reported on stderr (`STORYSTORE_EVIDENCE_UNVERIFIED`). The
+story still generates; nothing blocks. Review the stderr report: any
+`[FAILED]` ref is almost certainly wrong (fix the path/route or drop it),
+while `[unreachable]` refs are expected to stay unverified. The result JSON
+carries an `unverified` array describing each quarantined ref.
 
 Stdin JSON (mode supplies defaults for any omitted optional fields):
 
