@@ -323,6 +323,24 @@ def _audit_story(
             )
         )
 
+    # doc-evidence-missing: declared doc-evidence path didn't resolve to a file.
+    docs_missing = resolved.get("docs_missing", [])
+    for ref in docs_missing:
+        findings.append(
+            _make_finding(
+                "doc-evidence-missing",
+                story_slug=slug,
+                severity=severity,
+                suggested_action="add-evidence",
+                body=(
+                    f"Doc evidence path `{ref}` does not resolve to a file in the "
+                    f"repository. The referenced doc was likely moved, renamed, or "
+                    f"removed. Either restore the file, fix the path, or update the story."
+                ),
+                title=f"doc evidence `{ref}` did not resolve",
+            )
+        )
+
     # claim-unsupported: claims with no resolved evidence support.
     claims_section = getattr(story, "sections", {}).get("Auditable Claims", "")
     claims = _extract_bullets(claims_section)
@@ -333,7 +351,11 @@ def _audit_story(
     has_resolved_flag = bool(resolved.get("flag_resolved"))
     has_resolved_copy = bool(resolved.get("copy_resolved"))
     has_any_evidence = has_resolved_tests or has_resolved_docs or has_valid_surface or has_resolved_schema or has_resolved_flag or has_resolved_copy
-    if claims and not has_any_evidence:
+    # Deduplication: when a dangling doc path already produced a
+    # doc-evidence-missing finding for this story, that is the direct, root-cause
+    # finding. Suppress the indirect claim-unsupported finding so one broken doc
+    # path does not surface twice for the same story.
+    if claims and not has_any_evidence and not docs_missing:
         bullets = "\n".join(f"- {c}" for c in claims)
         findings.append(
             _make_finding(
