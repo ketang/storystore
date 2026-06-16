@@ -120,6 +120,7 @@ disclaimers.
 ### Surface
 - `cli: example`
 - `POST /example`
+- `skill: example`
 ### Docs
 - `README.md`
 
@@ -147,6 +148,35 @@ Inferred from code; not human-confirmed.
 ```
 
 Coverage reports list slugs still carrying this placeholder.
+
+## Surface Evidence References
+
+`Evidence.Surface` entries name a user-facing surface using a `<prefix>:
+<value>` form (the bare `METHOD /path` form is sugar for `route:`). The
+recognized prefixes are the only forms the bundled validator accepts; a
+surface ref using any other prefix is reported as `surface-missing`
+("could not be parsed"). Generators must emit only refs the validator
+accepts.
+
+| Prefix             | Value form                | Resolves against                     |
+|--------------------|---------------------------|--------------------------------------|
+| `cli:`             | command name              | extracted CLI commands               |
+| `route:`           | `METHOD /path`            | extracted HTTP routes                |
+| `bin:`             | bin name                  | `package.json` bins                  |
+| `exports:`         | export subpath            | `package.json` exports               |
+| `skill:`           | skill name                | skill directories (`*/SKILL.md`)     |
+| `test:`            | test name                 | not inventory-matched (syntax only)  |
+| `heading:`, `doc:` | heading text / file       | extracted doc headings (syntax only) |
+| `schema:`          | `table.column`            | migration files                      |
+| `flag:`            | flag identifier           | flag definitions                     |
+| `copy:`            | `<file>#<key>`            | locale/copy files                    |
+
+A `skill:` ref names a skill directory — a directory containing a
+`SKILL.md` file (e.g. `skills/<name>/SKILL.md` or
+`catalog/skills/<name>/SKILL.md`). The skill name is the directory name.
+Skill directories are inventoried on every repository regardless of
+detected language, so `skill:` refs resolve in Python- and
+markdown-centric repos that ship no TypeScript surfaces.
 
 ## Draft Story Evaluation
 

@@ -123,6 +123,31 @@ def test_finds_readme_and_design_headings(tmp_path: Path):
     assert headings == ["Authentication", "Login", "Setup", "Storage Layer"]
 
 
+def test_finds_skill_directories_as_candidates(tmp_path: Path):
+    for name in ("stories-audit", "deploy-app"):
+        d = tmp_path / "skills" / name
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+    out = _run(tmp_path)
+    skills = [c for c in out["candidates"] if c["kind"] == "skill"]
+    names = sorted(c["name"] for c in skills)
+    assert names == ["deploy-app", "stories-audit"]
+    # Surface-ref form used for subtraction must be validator-accepted.
+    assert all(c["summary"] for c in skills)
+    assert all(
+        f"skills/{c['name']}/SKILL.md" in c["evidence"] for c in skills
+    )
+
+
+def test_skill_candidate_subtracted_when_authored(tmp_path: Path):
+    d = tmp_path / "skills" / "deploy-app"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("# deploy-app\n", encoding="utf-8")
+    _write_story(tmp_path, "deploy-the-app", surface_refs=["skill: deploy-app"])
+    out = _run(tmp_path)
+    assert [c for c in out["candidates"] if c["kind"] == "skill"] == []
+
+
 def test_finds_test_names_from_spec_files(tmp_path: Path):
     tests = tmp_path / "tests"
     tests.mkdir()

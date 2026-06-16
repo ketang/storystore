@@ -198,6 +198,29 @@ def test_index_entry_includes_status_authority_resistance(tmp_path):
     assert "(active, accepted, high)" in index
 
 
+def test_unparseable_surface_ref_refused_exits_2(tmp_path):
+    # The generator must not emit a surface ref its own audit validator rejects.
+    repo = _init_repo(tmp_path)
+    payload = _base_payload(
+        evidence={"tests": [], "surface": ["frobnicate: whatsit"], "docs": ["README.md"]}
+    )
+    result = _run(repo, payload, "--observed")
+    assert result.returncode == 2, result.stderr
+    assert "surface ref" in result.stderr.lower()
+    assert not (repo / "docs" / "stories" / "authenticated-login.md").exists()
+
+
+def test_skill_surface_ref_is_accepted(tmp_path):
+    repo = _init_repo(tmp_path)
+    payload = _base_payload(
+        evidence={"tests": [], "surface": ["skill: stories-audit"], "docs": ["README.md"]}
+    )
+    result = _run(repo, payload, "--observed")
+    assert result.returncode == 0, result.stderr
+    parsed = lib.parse_story(repo / "docs" / "stories" / "authenticated-login.md")
+    assert parsed.evidence_surface == ["skill: stories-audit"]
+
+
 def test_written_story_parses_with_storystore_lib(tmp_path):
     repo = _init_repo(tmp_path)
     result = _run(repo, _base_payload(), "--interview")
