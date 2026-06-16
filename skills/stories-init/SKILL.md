@@ -161,11 +161,21 @@ Run Phase 2 only when the Phase 1 output reports `fresh_init: true`.
    retained by the user), pipe its JSON to:
 
    ```bash
-   python3 "$STORYSTORE_SHARED/write_story.py" --repo-root <repo-root> --observed
+   python3 "$STORYSTORE_SHARED/write_story.py" --repo-root <repo-root> --observed --verify
    ```
 
    `write_story.py` enforces the slug rules and validity matrix, writes
    `docs/stories/<slug>.md`, and wholesale-regenerates `docs/stories/INDEX.md`.
+
+   Always pass `--verify` on init. It deterministically resolves each evidence
+   ref against the repo before writing: a mechanically-checkable ref that fails
+   to resolve — a fabricated endpoint, or a route missing its mount prefix —
+   and any ref outside deterministic reach is quarantined under a
+   `### <Kind> (unverified)` heading instead of being seeded as clean evidence,
+   and is reported on stderr (`STORYSTORE_EVIDENCE_UNVERIFIED`). The story still
+   generates. This is the guard against the original failure mode: init-seeded
+   stories shipping fabricated endpoints and missing mount prefixes as clean
+   evidence. Inspect every `[FAILED]` ref before committing.
 
    `--observed` defaults: `status=draft`, `authority=observed`,
    `change_resistance=low`, `locked_sections=[]`. `authority: observed`

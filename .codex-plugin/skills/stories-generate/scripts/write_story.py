@@ -2,10 +2,16 @@
 """Write a schema-compliant story markdown file and regenerate INDEX.md.
 
 Usage:
-    write_story.py --repo-root <repo-root> [--interview | --observed]
+    write_story.py --repo-root <repo-root> [--interview | --observed] [--verify]
 
 Reads story data as JSON on stdin. Writes ``docs/stories/<slug>.md`` to the
 target repo and overwrites ``docs/stories/INDEX.md`` with a slug-sorted index.
+
+With ``--verify``, evidence refs are deterministically resolved against the
+repo before writing: refs that are mechanically checkable but fail resolution
+(a fabricated endpoint, or a route missing its mount prefix) and refs outside
+deterministic reach are quarantined under ``### <Kind> (unverified)`` headings
+instead of being written as clean evidence, and are reported on stderr.
 
 Exit codes:
     0  success
@@ -30,6 +36,15 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 LIB_PATH = SCRIPT_DIR / "storystore_lib.py"
 INV_PATH = SCRIPT_DIR / "inventory.py"
+
+# Surface-ref kinds that are deterministically checkable against the extracted
+# surface inventory. Mirrors ``stories-audit``: only these kinds are validated
+# against the inventory. Name/text-based refs (``test:``, ``heading:``) and
+# resolver-backed refs (``schema:``, ``flag:``, ``copy:``) are treated as
+# outside deterministic reach at write time and pass through marked unverified.
+_DETERMINISTIC_SURFACE_KINDS = frozenset(
+    {"cli-command", "http-route", "bin", "exports", "skill"}
+)
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -65,6 +80,143 @@ def _load_lib():
 
 def _load_inventory():
     return _load_module("storystore_inventory", INV_PATH)
+
+
+def _normalize_surface_ref(inv, ref: str) -> tuple[str, ...] | None:
+    """Map a surface ref to an inventory key tuple, or ``None``.
+
+    Mirrors ``stories-audit``'s normalization so write-time verification shares
+    the audit's determinism boundary exactly. Refs whose prefix has no surface
+    inventory equivalent (``test:``, ``heading:``, ``schema:``, ``flag:``,
+    ``copy:``) or that are malformed return ``None``.
+    """
+    match = inv._SURFACE_REF_RE.match(ref)
+    if not match:
+        return None
+    prefix = match.group("prefix").lower()
+    rest = match.group("rest").strip()
+    if not rest:
+        return None
+    if prefix == "cli":
+        return ("cli-command", rest)
+    if prefix == "route":
+        rmatch = inv._ROUTE_REST_RE.match(rest)
+        if not rmatch:
+            return None
+        return ("http-route", rmatch.group("method").upper(), rmatch.group("path"))
+    if prefix == "bin":
+        return ("bin", rest)
+    if prefix in ("exports", "export"):
+        return ("exports", rest)
+    if prefix == "skill":
+        return ("skill", rest)
+    return None
+
+
+def _inventory_keys(inventory: dict[str, Any]) -> set[tuple[str, ...]]:
+    keys: set[tuple[str, ...]] = set()
+    for surface in inventory.get("surfaces", []):
+        kind = surface.get("kind")
+        if kind == "cli-command":
+            keys.add(("cli-command", surface.get("name", "")))
+        elif kind == "http-route":
+            keys.add(("http-route", surface.get("method", ""), surface.get("path", "")))
+        elif kind == "bin":
+            keys.add(("bin", surface.get("name", "")))
+        elif kind == "exports":
+            keys.add(("exports", surface.get("name", "")))
+        elif kind == "skill":
+            keys.add(("skill", surface.get("name", "")))
+    return keys
+
+
+def _verify_evidence(
+    repo_root: Path, evidence: dict[str, Any] | None
+) -> tuple[dict[str, list[str]], dict[str, list[str]], list[dict[str, Any]]]:
+    """Deterministically resolve evidence refs against the repo.
+
+    Returns ``(resolved, unverified, report)`` where ``resolved`` and
+    ``unverified`` each map ``"tests"``/``"surface"``/``"docs"`` to the refs
+    that did / did not resolve, and ``report`` carries one entry per
+    unverified ref describing why it was not written as clean evidence.
+
+    A ref is split into ``unverified`` when it is mechanically checkable and
+    fails to resolve (``deterministic: True`` — the pickpackit pattern: a
+    fabricated endpoint or a route missing its mount prefix) or when it is
+    genuinely outside deterministic reach (``deterministic: False`` — a
+    name/text-based surface ref). Either way it is quarantined so it is never
+    written as clean evidence.
+    """
+    evidence = evidence or {}
+    inv = _load_inventory()
+    inventory = inv.build_inventory(repo_root)
+    inventory_keys = _inventory_keys(inventory)
+
+    resolved: dict[str, list[str]] = {"tests": [], "surface": [], "docs": []}
+    unverified: dict[str, list[str]] = {"tests": [], "surface": [], "docs": []}
+    report: list[dict[str, Any]] = []
+
+    def _mark_unverified(category: str, ref: str, *, deterministic: bool, reason: str) -> None:
+        unverified[category].append(ref)
+        report.append(
+            {
+                "category": category,
+                "ref": ref,
+                "deterministic": deterministic,
+                "reason": reason,
+            }
+        )
+
+    for ref in evidence.get("tests") or []:
+        if isinstance(ref, str) and inv._resolve_test_ref(repo_root, ref):
+            resolved["tests"].append(ref)
+        else:
+            _mark_unverified(
+                "tests", ref, deterministic=True,
+                reason="no file matches the declared path or glob",
+            )
+
+    for ref in evidence.get("docs") or []:
+        rel = ref.strip() if isinstance(ref, str) else ""
+        if rel and (repo_root / rel).is_file():
+            resolved["docs"].append(ref)
+        else:
+            _mark_unverified(
+                "docs", ref, deterministic=True,
+                reason="declared doc file does not exist",
+            )
+
+    for ref in evidence.get("surface") or []:
+        key = _normalize_surface_ref(inv, ref) if isinstance(ref, str) else None
+        if key is not None and key[0] in _DETERMINISTIC_SURFACE_KINDS:
+            if key in inventory_keys:
+                resolved["surface"].append(ref)
+            else:
+                _mark_unverified(
+                    "surface", ref, deterministic=True,
+                    reason="no extracted user-facing surface matches this ref",
+                )
+        else:
+            _mark_unverified(
+                "surface", ref, deterministic=False,
+                reason="outside deterministic reach (name/text-based ref)",
+            )
+
+    return resolved, unverified, report
+
+
+def _report_unverified(report: list[dict[str, Any]]) -> None:
+    if not report:
+        return
+    failed = sum(1 for r in report if r["deterministic"])
+    print(
+        f"STORYSTORE_EVIDENCE_UNVERIFIED: {len(report)} evidence ref(s) marked "
+        f"unverified ({failed} failed deterministic resolution).",
+        file=sys.stderr,
+    )
+    for r in report:
+        tag = "FAILED" if r["deterministic"] else "unreachable"
+        print(f"  [{tag}] {r['category']} `{r['ref']}`: {r['reason']}", file=sys.stderr)
 
 
 def _die(msg: str, code: int = 2) -> "NoReturn":  # type: ignore[name-defined]
@@ -149,8 +301,12 @@ def _render_frontmatter(data: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_evidence(evidence: dict[str, Any] | None) -> str:
+def _render_evidence(
+    evidence: dict[str, Any] | None,
+    unverified: dict[str, list[str]] | None = None,
+) -> str:
     evidence = evidence or {}
+    unverified = unverified or {}
     out: list[str] = ["## Evidence", ""]
     for heading, key in (("Tests", "tests"), ("Surface", "surface"), ("Docs", "docs")):
         out.append(f"### {heading}")
@@ -158,10 +314,26 @@ def _render_evidence(evidence: dict[str, Any] | None) -> str:
         for item in items:
             out.append(f"- `{item}`")
         out.append("")
+    # Quarantined refs: rendered under headings the story parser does not treat
+    # as evidence, so a checkable-but-unresolved ref (or one outside
+    # deterministic reach) is visible to humans yet never counted as clean
+    # evidence by audit/coverage.
+    if any(unverified.get(k) for k in ("tests", "surface", "docs")):
+        for heading, key in (("Tests", "tests"), ("Surface", "surface"), ("Docs", "docs")):
+            items = unverified.get(key) or []
+            if not items:
+                continue
+            out.append(f"### {heading} (unverified)")
+            for item in items:
+                out.append(f"- `{item}`")
+            out.append("")
     return "\n".join(out).rstrip() + "\n"
 
 
-def _render_body(payload: dict[str, Any]) -> str:
+def _render_body(
+    payload: dict[str, Any],
+    unverified: dict[str, list[str]] | None = None,
+) -> str:
     parts: list[str] = []
     parts.append(f"# {payload['title']}")
     parts.append("")
@@ -185,7 +357,7 @@ def _render_body(payload: dict[str, Any]) -> str:
     else:
         parts.append("- TODO")
     parts.append("")
-    parts.append(_render_evidence(payload.get("evidence")))
+    parts.append(_render_evidence(payload.get("evidence"), unverified))
     return "\n".join(parts)
 
 
@@ -232,6 +404,16 @@ def main() -> int:
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument("--interview", action="store_true")
     mode_group.add_argument("--observed", action="store_true")
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help=(
+            "Deterministically resolve evidence refs before writing. Refs that "
+            "are mechanically checkable but fail to resolve (and refs outside "
+            "deterministic reach) are written under '### <Kind> (unverified)' "
+            "headings rather than as clean evidence, and reported on stderr."
+        ),
+    )
     args = parser.parse_args()
 
     mode = "--interview" if args.interview else "--observed"
@@ -268,9 +450,18 @@ def main() -> int:
     if story_path.exists():
         _die(f"refusing to overwrite existing story: {story_path}", 2)
 
+    unverified: dict[str, list[str]] | None = None
+    report: list[dict[str, Any]] = []
+    if args.verify:
+        resolved, unverified, report = _verify_evidence(repo_root, data.get("evidence"))
+        # Only resolved refs render as clean evidence; quarantined refs render
+        # under the separate unverified headings.
+        data = dict(data)
+        data["evidence"] = resolved
+
     # Build full file text and validate via storystore_lib parsing.
     frontmatter = _render_frontmatter(data)
-    body = _render_body(data)
+    body = _render_body(data, unverified)
     text = frontmatter + "\n" + body
 
     lib = _load_lib()
@@ -284,9 +475,13 @@ def main() -> int:
 
     _regenerate_index(stories_dir, lib)
 
+    _report_unverified(report)
+
     result = {
         "path": f"docs/stories/{data['slug']}.md",
         "index_updated": True,
+        "verified": bool(args.verify),
+        "unverified": report,
     }
     print(json.dumps(result))
     return 0
