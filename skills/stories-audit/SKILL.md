@@ -13,10 +13,27 @@ repo root and reports fidelity findings. It never edits, creates, or
 deletes story files — except `--bump-clean`, which writes `last_audited`
 on stories that finish the run with zero findings.
 
+## Locating storystore scripts
+
+Storystore's runtime scripts ship at different paths depending on install
+layout, so resolve their directory once and reuse it for every command below.
+Set `skill_dir` to the absolute path of the directory containing **this
+`SKILL.md`**, then:
+
+```bash
+# Claude layout: this file is <plugin-root>/.claude/skills/<name>.md → scripts at <plugin-root>/shared
+# Codex layout:  this file is <plugin-root>/.codex-plugin/skills/<name>/SKILL.md → scripts at <skill_dir>/scripts
+STORYSTORE_SHARED="$(for d in "$skill_dir/scripts" "$skill_dir/../../shared"; do [ -d "$d" ] && (cd "$d" && pwd) && break; done)"
+```
+
+If `STORYSTORE_SHARED` comes back empty, the plugin is not laid out as
+expected — stop and report rather than guessing a path. Every shared-script
+invocation below runs as `python3 "$STORYSTORE_SHARED/<script>.py"`.
+
 ## Command
 
 ```bash
-stories-audit/scripts/audit.py \
+python3 "$STORYSTORE_SHARED/audit.py" \
   --repo-root <repo-root> \
   [--story <slug>]... \
   [--strict] \
@@ -28,9 +45,9 @@ stories-audit/scripts/audit.py \
   [--perf-warn-ms <ms>]
 ```
 
-The script is materialized into the skill's `scripts/` directory at
-publish time. From a checkout of this repo, the equivalent invocation is
-`python3 shared/audit.py --repo-root <repo-root>`.
+`STORYSTORE_SHARED` resolves to `<plugin-root>/shared` in the Claude layout
+and to the materialized per-skill `scripts/` dir in the Codex layout, so the
+same command line works in both.
 
 Flags:
 
@@ -113,10 +130,10 @@ perf-warn threshold.
 
 ```bash
 # Full audit; non-zero exit if anything is wrong.
-stories-audit/scripts/audit.py --repo-root . --strict
+python3 "$STORYSTORE_SHARED/audit.py" --repo-root . --strict
 
 # Audit a single story and bump its last_audited if clean.
-stories-audit/scripts/audit.py --repo-root . --story login --bump-clean
+python3 "$STORYSTORE_SHARED/audit.py" --repo-root . --story login --bump-clean
 ```
 
 ## Cross-references

@@ -11,10 +11,27 @@ This skill is **read-only**. It builds the surface inventory under the
 repo root, loads `docs/stories/<slug>.md`, and reports coverage gaps. It
 never edits, creates, or deletes story files.
 
+## Locating storystore scripts
+
+Storystore's runtime scripts ship at different paths depending on install
+layout, so resolve their directory once and reuse it for every command below.
+Set `skill_dir` to the absolute path of the directory containing **this
+`SKILL.md`**, then:
+
+```bash
+# Claude layout: this file is <plugin-root>/.claude/skills/<name>.md → scripts at <plugin-root>/shared
+# Codex layout:  this file is <plugin-root>/.codex-plugin/skills/<name>/SKILL.md → scripts at <skill_dir>/scripts
+STORYSTORE_SHARED="$(for d in "$skill_dir/scripts" "$skill_dir/../../shared"; do [ -d "$d" ] && (cd "$d" && pwd) && break; done)"
+```
+
+If `STORYSTORE_SHARED` comes back empty, the plugin is not laid out as
+expected — stop and report rather than guessing a path. Every shared-script
+invocation below runs as `python3 "$STORYSTORE_SHARED/<script>.py"`.
+
 ## Command
 
 ```bash
-stories-coverage/scripts/coverage.py \
+python3 "$STORYSTORE_SHARED/coverage.py" \
   --repo-root <repo-root> \
   [--strict] \
   [--surface-kind <kind>]... \
@@ -27,9 +44,9 @@ stories-coverage/scripts/coverage.py \
   [--perf-warn-ms <ms>]
 ```
 
-The script is materialized into the skill's `scripts/` directory at
-publish time. From a checkout of this repo, the equivalent invocation is
-`python3 shared/coverage.py --repo-root <repo-root>`.
+`STORYSTORE_SHARED` resolves to `<plugin-root>/shared` in the Claude layout
+and to the materialized per-skill `scripts/` dir in the Codex layout, so the
+same command line works in both.
 
 Flags:
 
@@ -104,10 +121,10 @@ A stderr perf-warning fires when the run exceeds the perf-warn threshold.
 
 ```bash
 # Coverage pass; non-zero exit if any gap exists.
-stories-coverage/scripts/coverage.py --repo-root . --strict
+python3 "$STORYSTORE_SHARED/coverage.py" --repo-root . --strict
 
 # Only HTTP routes, flag any active story below "complete".
-stories-coverage/scripts/coverage.py --repo-root . \
+python3 "$STORYSTORE_SHARED/coverage.py" --repo-root . \
   --surface-kind http-route --completeness-min-rating complete
 ```
 

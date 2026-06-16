@@ -22,6 +22,23 @@ dedicated feature branch in a linked worktree outside the repo. If the repo
 uses an issue tracker with claim semantics, claim the relevant issue before
 edits.
 
+## Locating storystore scripts
+
+Storystore's runtime scripts ship at different paths depending on install
+layout, so resolve their directory once and reuse it for every command below.
+Set `skill_dir` to the absolute path of the directory containing **this
+`SKILL.md`**, then:
+
+```bash
+# Claude layout: this file is <plugin-root>/.claude/skills/<name>.md → scripts at <plugin-root>/shared
+# Codex layout:  this file is <plugin-root>/.codex-plugin/skills/<name>/SKILL.md → scripts at <skill_dir>/scripts
+STORYSTORE_SHARED="$(for d in "$skill_dir/scripts" "$skill_dir/../../shared"; do [ -d "$d" ] && (cd "$d" && pwd) && break; done)"
+```
+
+If `STORYSTORE_SHARED` comes back empty, the plugin is not laid out as
+expected — stop and report rather than guessing a path. Every shared-script
+invocation below runs as `python3 "$STORYSTORE_SHARED/<script>.py"`.
+
 ## Required Flow
 
 ### 1. Identify Target Stories
@@ -33,7 +50,7 @@ Identify the story slug(s) that need editing. One slug per edit pass.
 Before any edit, run a scoped audit against the targeted story:
 
 ```bash
-stories-audit/scripts/audit.py --repo-root <repo-root> --story <slug>
+python3 "$STORYSTORE_SHARED/audit.py" --repo-root <repo-root> --story <slug>
 ```
 
 This is non-negotiable. Every edit pass starts with a scoped audit. There
@@ -56,14 +73,16 @@ Classify one finding at a time. Do not batch-classify.
 For findings classified as code-side bugs, append to the drift todo via
 `drift_todo.py` and do **not** edit the story:
 
-```python
-from shared.drift_todo import append_drift_todo
+```bash
+PYTHONPATH="$STORYSTORE_SHARED" python3 - <<'PY'
+from drift_todo import append_drift_todo
 
 append_drift_todo(
     slug="<story-slug>",
     description="<human-readable description of the mismatch>",
     metadata={"finding_kind": "<kind>", "suggested_action": "fix-code"},
 )
+PY
 ```
 
 The drift todo defaults to `docs/stories/drift-todo.md` (gitignored;
@@ -78,7 +97,7 @@ behavior; the code is what diverged.
 Before applying any story-side edit, check the lock state:
 
 ```bash
-shared/lock_check.py --repo-root <repo-root> --slug <slug> --section <section>
+python3 "$STORYSTORE_SHARED/lock_check.py" --repo-root <repo-root> --slug <slug> --section <section>
 ```
 
 Review the output:
@@ -159,7 +178,7 @@ When the edit involves a behavioral change to a user-facing surface, run
 `stories-impact-check` before applying code changes:
 
 ```bash
-stories-impact-check/scripts/impact_check.py \
+python3 "$STORYSTORE_SHARED/impact_check.py" \
   --repo-root <repo-root> \
   [--file <path>]... \
   [--surface <ref>]... \
@@ -174,7 +193,7 @@ gating decisions based on `change_resistance` and `authority`.
 Apply the edit via `edit_section.py`:
 
 ```bash
-shared/edit_section.py \
+python3 "$STORYSTORE_SHARED/edit_section.py" \
   --repo-root <repo-root> \
   --story <slug> \
   --section <section> \
