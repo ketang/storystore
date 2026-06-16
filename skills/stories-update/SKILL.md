@@ -282,4 +282,3 @@ classification:
   surfaces
 - `shared/spec.md` — schema reference for frontmatter fields, change
   resistance levels, and audit finding kinds
-- `2026-05-01-storystore-plan-3-edits-and-impact.md` — original design doc
