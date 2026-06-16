@@ -4,8 +4,7 @@
 Reports stories affected by planned file, surface, or behavior changes so the
 calling agent can alert the user before proceeding. Read-only.
 
-See ``shared/spec.md`` and ``2026-05-01-storystore-plan-3-edits-and-impact.md``
-for the authoritative behavior contract.
+See ``shared/spec.md`` for the authoritative behavior contract.
 """
 
 from __future__ import annotations

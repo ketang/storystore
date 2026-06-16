@@ -130,6 +130,5 @@ python3 "$STORYSTORE_SHARED/coverage.py" --repo-root . \
 
 ## Cross-references
 
-- Implementation contract: `shared/spec.md` and
-  `2026-05-01-storystore-plan-2-fidelity.md`.
+- Implementation contract: `shared/spec.md`.
 - Companion fidelity report: `stories-audit`.

@@ -250,7 +250,6 @@ git diff --cached --name-only | \
 
 ## Cross-References
 
-- Implementation contract: `shared/spec.md` and
-  `2026-05-01-storystore-plan-3-edits-and-impact.md`.
+- Implementation contract: `shared/spec.md`.
 - `stories-update` requires that any code change implementing a story be
   preceded by `stories-impact-check`.

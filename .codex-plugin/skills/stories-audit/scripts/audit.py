@@ -5,8 +5,8 @@ Walks ``docs/stories/<slug>.md`` files and reports findings about declared
 evidence that no longer resolves, claims unsupported by evidence, and intent
 that contradicts deterministic evidence.
 
-See ``shared/spec.md`` and ``2026-05-01-storystore-plan-2-fidelity.md`` for the
-authoritative contract. Exit codes follow that spec:
+See ``shared/spec.md`` for the authoritative contract. Exit codes follow that
+spec:
 
     0  success (default)
     1  findings present (--strict only)

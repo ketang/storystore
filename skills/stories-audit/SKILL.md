@@ -142,6 +142,5 @@ python3 "$STORYSTORE_SHARED/audit.py" --repo-root . --story login --bump-clean
 
 ## Cross-references
 
-- Implementation contract: `shared/spec.md` and
-  `2026-05-01-storystore-plan-2-fidelity.md`.
+- Implementation contract: `shared/spec.md`.
 - Companion coverage report: `stories-coverage`.
