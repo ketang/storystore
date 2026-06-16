@@ -74,6 +74,33 @@ After installation, the Codex plugin files are placed under the marketplace:
   skills/<name>/references/           # shared reference docs per skill
 ```
 
+## Mechanical Impact Trigger
+
+`stories-impact-check` ships a companion script, `impact_trigger.py`, that
+mechanically warns when a changed path matches a story's evidence refs
+(treated as path prefixes/globs). Unlike the skill, it is meant to be wired
+into something automatic — a Claude Code `PreToolUse` hook, a git pre-commit
+hook, or a CI step — and it always fails open (a missing or corrupt story
+corpus never blocks an edit).
+
+The script materializes next to the other shared scripts for the
+`stories-impact-check` skill:
+
+```text
+.claude:  <plugin-root>/shared/impact_trigger.py
+Codex:    <marketplace-root>/storystore/skills/stories-impact-check/scripts/impact_trigger.py
+```
+
+Quick check from any repo with a story corpus:
+
+```bash
+git diff --name-only | python3 /path/to/impact_trigger.py --repo-root .
+```
+
+Full installation options — including the `PreToolUse` hook JSON and
+`--exit-code` gating for pre-commit/CI — are documented in the
+`stories-impact-check` skill under **Mechanical Trigger (impact_trigger.py)**.
+
 ## Building From Source
 
 Prerequisites: Python 3.10+ (no third-party dependencies for the build).

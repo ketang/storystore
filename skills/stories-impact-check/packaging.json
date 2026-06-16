@@ -1,1 +1,1 @@
-{"shared_scripts": ["impact_check.py", "inventory.py", "spec.md", "storystore_lib.py"]}
+{"shared_scripts": ["impact_check.py", "impact_trigger.py", "inventory.py", "spec.md", "storystore_lib.py"]}

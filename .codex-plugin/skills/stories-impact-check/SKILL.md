@@ -164,12 +164,89 @@ carries `change_resistance: high`, the change is not gated — observed stories
 record what the software does today, not committed intent, so they cannot
 require user acknowledgment. They surface as context only.
 
+## Mechanical Trigger (impact_trigger.py)
+
+The skill above is description-driven: it fires only when an agent remembers
+to run it. For changes that should warn *automatically*, a companion script
+ships alongside it:
+
+```bash
+python3 "$STORYSTORE_SHARED/impact_trigger.py" \
+  --repo-root <repo-root> \
+  [<changed-path>...] \
+  [--hook] [--json] [--exit-code]
+```
+
+Given the repo-relative paths a change will touch, it matches each path
+against **every story's evidence refs treated as path prefixes / globs** and
+prints a non-blocking warning naming the affected stories. Matching is purely
+mechanical — exact, directory-prefix (`web/src/pages/` matches
+`web/src/pages/Closet.tsx`), or `fnmatch` glob — so it complements, not
+replaces, the semantic matching in `impact_check.py`.
+
+It is designed to be **wired into something automatic** and to **fail open**:
+a missing `docs/stories/`, an unreadable or malformed story, or any internal
+error yields no warning and never a non-zero exit (unless `--exit-code` is set
+*and* a real match is found). It must never stand between an agent and an
+unrelated edit.
+
+Input channels:
+
+- **Positional args** — repo-relative or absolute changed paths.
+- **Stdin (newline-delimited)** — e.g. `git diff --name-only | impact_trigger.py --repo-root .`.
+- **`--hook`** — reads a Claude Code PreToolUse JSON payload on stdin and
+  extracts paths from `tool_input.file_path` / `notebook_path`, and from
+  `tool_input.command` tokens (so a `git mv` rename surfaces the old path).
+
+Flags:
+
+- `--json` — emit `{"affected": [...]}` instead of a human warning.
+- `--exit-code` — exit 1 when a story is affected (for CI/pre-commit gating).
+  Internal errors still exit 0; failing open always wins.
+
+### Installing as a Claude Code PreToolUse hook
+
+Resolve `STORYSTORE_SHARED` once (see *Locating storystore scripts*), then add
+a `PreToolUse` hook to your project's `.claude/settings.json` matching the
+file-mutating tools. The hook is non-blocking — it emits a warning on stderr
+and exits 0:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$STORYSTORE_SHARED/impact_trigger.py\" --repo-root \"$CLAUDE_PROJECT_DIR\" --hook"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Substitute the absolute `impact_trigger.py` path for `$STORYSTORE_SHARED/...`
+in the JSON (settings files do not expand the shell variable). To gate a
+pre-commit hook or CI step instead, drop `--hook`, pipe in changed paths, and
+add `--exit-code`:
+
+```bash
+git diff --cached --name-only | \
+  python3 /path/to/impact_trigger.py --repo-root . --exit-code
+```
+
 ## Non-Goals
 
-- No PreToolUse hook enforcement. Activation is description-driven.
-- No git-introspection signal. The skill does not read the working tree
-  diff; pass `--file` explicitly.
-- No `--record` mode. The skill does not write anywhere.
+- The **skill** does no PreToolUse hook enforcement; its activation is
+  description-driven. Automatic, mechanical warnings are the job of the
+  separate `impact_trigger.py` artifact documented above.
+- No git-introspection signal. Neither the skill nor the trigger reads the
+  working tree diff; pass `--file`/changed paths explicitly.
+- No `--record` mode. Nothing here writes to story files.
 
 ## Cross-References
 
