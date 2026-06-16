@@ -1,0 +1,21 @@
+# Files kept in the repository but excluded from the published plugin
+# archive. Claude installs this plugin from the GitHub source tarball
+# (the cache under ~/.claude/plugins/cache is an archive extract, not a
+# clone) and the Codex installer downloads the same codeload tarball;
+# GitHub honors `export-ignore` when generating those archives, so these
+# paths never reach a consumer. Runtime-needed files (skills/, shared/,
+# scripts/, spec.md, README.md, INSTALL.md, plugin-version.json, and the
+# generated .claude*/.codex-plugin payloads) are intentionally not listed.
+# See issue ss-15i.
+
+# Internal planning and design docs (the contract is spec.md, not these).
+/2026-05-01-storystore-plan-1-foundation.md export-ignore
+/2026-05-01-storystore-plan-2-fidelity.md export-ignore
+/2026-05-01-storystore-plan-3-edits-and-impact.md export-ignore
+/2026-05-01-storystore-target-design.md export-ignore
+
+# Test suite — kept in the repo, excluded from the published bundle.
+/tests/ export-ignore
+
+# Tracker state.
+/.beads/ export-ignore
