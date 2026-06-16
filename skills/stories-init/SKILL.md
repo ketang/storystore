@@ -20,12 +20,31 @@ init.
   the relevant issue and claim it before edits.
 - Note the verification command before changing files.
 
+## Locating storystore scripts
+
+Storystore's runtime scripts ship at different paths depending on install
+layout, so resolve their directory once and reuse it for every command below.
+Set `skill_dir` to the absolute path of the directory containing **this
+`SKILL.md`**, then:
+
+```bash
+# Claude layout: this file is <plugin-root>/.claude/skills/<name>.md → scripts at <plugin-root>/shared
+# Codex layout:  this file is <plugin-root>/.codex-plugin/skills/<name>/SKILL.md → scripts at <skill_dir>/scripts
+STORYSTORE_SHARED="$(for d in "$skill_dir/scripts" "$skill_dir/../../shared"; do [ -d "$d" ] && (cd "$d" && pwd) && break; done)"
+```
+
+If `STORYSTORE_SHARED` comes back empty, the plugin is not laid out as
+expected — stop and report rather than guessing a path. Every shared-script
+invocation below runs as `python3 "$STORYSTORE_SHARED/<script>.py"`. The Phase 1
+mechanical tool is not a shared script — it lives in the plugin's top-level
+`scripts/` dir, reached as `"$skill_dir/../../scripts/stories-init-mechanical"`.
+
 ## Phase 1 (mechanical)
 
 Run the bundled script:
 
 ```bash
-scripts/stories-init-mechanical --repo-root <repo-root>
+"$skill_dir/../../scripts/stories-init-mechanical" --repo-root <repo-root>
 ```
 
 It creates missing `docs/stories/` scaffolding (`README.md`, `INDEX.md`),
@@ -56,7 +75,7 @@ Run Phase 2 only when the Phase 1 output reports `fresh_init: true`.
 1. **Discover candidates.** Invoke `list_candidates.py`:
 
    ```bash
-   shared/list_candidates.py --repo-root <repo-root>
+   python3 "$STORYSTORE_SHARED/list_candidates.py" --repo-root <repo-root>
    ```
 
    Output is `{"candidates": [{"kind", "name", "summary", "evidence": [...]}, ...]}`.
@@ -142,7 +161,7 @@ Run Phase 2 only when the Phase 1 output reports `fresh_init: true`.
    retained by the user), pipe its JSON to:
 
    ```bash
-   shared/write_story.py --repo-root <repo-root> --observed
+   python3 "$STORYSTORE_SHARED/write_story.py" --repo-root <repo-root> --observed
    ```
 
    `write_story.py` enforces the slug rules and validity matrix, writes

@@ -51,10 +51,27 @@ Run before edits when any of the following is true:
 Run on the description alone if file or surface details are not yet
 determined. Re-run as scope sharpens.
 
+## Locating storystore scripts
+
+Storystore's runtime scripts ship at different paths depending on install
+layout, so resolve their directory once and reuse it for every command below.
+Set `skill_dir` to the absolute path of the directory containing **this
+`SKILL.md`**, then:
+
+```bash
+# Claude layout: this file is <plugin-root>/.claude/skills/<name>.md → scripts at <plugin-root>/shared
+# Codex layout:  this file is <plugin-root>/.codex-plugin/skills/<name>/SKILL.md → scripts at <skill_dir>/scripts
+STORYSTORE_SHARED="$(for d in "$skill_dir/scripts" "$skill_dir/../../shared"; do [ -d "$d" ] && (cd "$d" && pwd) && break; done)"
+```
+
+If `STORYSTORE_SHARED` comes back empty, the plugin is not laid out as
+expected — stop and report rather than guessing a path. Every shared-script
+invocation below runs as `python3 "$STORYSTORE_SHARED/<script>.py"`.
+
 ## Command
 
 ```bash
-stories-impact-check/scripts/impact_check.py \
+python3 "$STORYSTORE_SHARED/impact_check.py" \
   --repo-root <repo-root> \
   [--file <path>]... \
   [--surface <ref>]... \

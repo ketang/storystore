@@ -23,6 +23,23 @@ else is optional. Sparse drafts are allowed.
 - If the repo uses an issue tracker with claim semantics, claim the
   relevant issue before edits.
 
+## Locating storystore scripts
+
+Storystore's runtime scripts ship at different paths depending on install
+layout, so resolve their directory once and reuse it for every command below.
+Set `skill_dir` to the absolute path of the directory containing **this
+`SKILL.md`**, then:
+
+```bash
+# Claude layout: this file is <plugin-root>/.claude/skills/<name>.md → scripts at <plugin-root>/shared
+# Codex layout:  this file is <plugin-root>/.codex-plugin/skills/<name>/SKILL.md → scripts at <skill_dir>/scripts
+STORYSTORE_SHARED="$(for d in "$skill_dir/scripts" "$skill_dir/../../shared"; do [ -d "$d" ] && (cd "$d" && pwd) && break; done)"
+```
+
+If `STORYSTORE_SHARED` comes back empty, the plugin is not laid out as
+expected — stop and report rather than guessing a path. Every shared-script
+invocation below runs as `python3 "$STORYSTORE_SHARED/<script>.py"`.
+
 ## Interview Mode
 
 Run with `--interview`. Conduct a short interview with the user:
@@ -54,7 +71,7 @@ story).
 1. **Discover candidates.**
 
    ```bash
-   shared/list_candidates.py --repo-root <repo-root>
+   python3 "$STORYSTORE_SHARED/list_candidates.py" --repo-root <repo-root>
    ```
 
    Output: `{"candidates": [{"kind", "name", "summary", "evidence": [...]}, ...]}`.
@@ -145,7 +162,7 @@ findings when obvious edge cases or failure modes are omitted.
 `list_candidates.py`:
 
 ```bash
-shared/list_candidates.py --repo-root <repo-root>
+python3 "$STORYSTORE_SHARED/list_candidates.py" --repo-root <repo-root>
 ```
 
 Stdout JSON:
@@ -169,7 +186,7 @@ an authored story are subtracted from output.
 `write_story.py`:
 
 ```bash
-shared/write_story.py --repo-root <repo-root> [--interview | --observed]
+python3 "$STORYSTORE_SHARED/write_story.py" --repo-root <repo-root> [--interview | --observed]
 ```
 
 Stdin JSON (mode supplies defaults for any omitted optional fields):
