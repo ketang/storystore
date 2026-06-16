@@ -171,6 +171,35 @@ Run Phase 2 only when the Phase 1 output reports `fresh_init: true`.
    `change_resistance=low`, `locked_sections=[]`. `authority: observed`
    with `change_resistance` in `{high, immutable}` exits 3.
 
+6. **Apply the agent-instruction pointer and record its outcome.** This is a
+   required step, not an optional offer. For *each* file in Phase 1's
+   `agent_instruction_files` list, the pointer below must reach one recorded
+   terminal state — there is no silent third state, and no detected file may be
+   left unaddressed.
+
+   Pointer text to add (append near the top of the file, or under an existing
+   conventions/workflow heading):
+
+   ```markdown
+   - This repo uses intent stories under `docs/stories/`. Before making
+     behavioral changes to user-facing functionality, run
+     `stories-impact-check`.
+   ```
+
+   Resolve each detected file to exactly one of:
+
+   - `applied` — the pointer text was written into the file. This is the
+     default; apply it unless the user explicitly declines.
+   - `already-present` — the pointer text (or an equivalent direction to run
+     `stories-impact-check`) is already in the file; nothing to write.
+   - `declined` — the user explicitly declined the pointer for this file.
+     A decline must be recorded durably in the repo tracker (a tracker note or
+     issue) so the decision survives the session. Do not use
+     `docs/stories/drift-todo.md` for this — it is reserved for story/software
+     drift notes.
+
+   Carry the per-file outcome through to the completion report (see **Finish**).
+
 ## Promotion Path: Observed → Accepted
 
 Seeded stories are written with `authority: observed` — they record what the
@@ -205,27 +234,18 @@ starting point that does not yet gate anything, and the next step — when they
 are ready — is human review and promotion of the stories that capture real
 intent.
 
-## Follow-Up
-
-After Phase 2 completes, offer this pointer for each detected
-agent-instruction file from Phase 1's output. This is a one-time
-fresh-init-only offer; never re-offer it. Apply the edit only with
-explicit user approval.
-
-```markdown
-- This repo uses intent stories under `docs/stories/`. Before making
-  behavioral changes to user-facing functionality, run
-  `stories-impact-check`.
-```
-
-Record any follow-up work in the repo tracker. Use
-`docs/stories/drift-todo.md` only for story/software drift notes.
-
 ## Finish
 
 Review the diff, rebuild generated plugin/docs outputs when the repo
 tracks them, run the selected verification command, and report the
 branch/worktree, tracker item, and verification result.
+
+**Report the agent-instruction pointer outcome.** The completion report must
+name every file in Phase 1's `agent_instruction_files` list and state its
+pointer outcome from Step 6 — `applied`, `already-present`, or `declined`
+(with the tracker reference where the decline was recorded). Every detected
+file must appear with an outcome; an unreported file is a gap to fix, not to
+omit.
 
 **Verify the gitignore change landed.** Phase 1 appends
 `docs/stories/drift-todo.md` to `.gitignore`. Confirm that entry is
