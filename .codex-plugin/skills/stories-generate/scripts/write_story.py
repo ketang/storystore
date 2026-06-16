@@ -29,6 +29,7 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 LIB_PATH = SCRIPT_DIR / "storystore_lib.py"
+INV_PATH = SCRIPT_DIR / "inventory.py"
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -47,15 +48,23 @@ OBSERVED_DEFAULTS = {
 }
 
 
-def _load_lib():
-    if "storystore_lib" in sys.modules:
-        return sys.modules["storystore_lib"]
-    spec = importlib.util.spec_from_file_location("storystore_lib", LIB_PATH)
+def _load_module(name: str, path: Path):
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
-    sys.modules["storystore_lib"] = mod
+    sys.modules[name] = mod
     spec.loader.exec_module(mod)
     return mod
+
+
+def _load_lib():
+    return _load_module("storystore_lib", LIB_PATH)
+
+
+def _load_inventory():
+    return _load_module("storystore_inventory", INV_PATH)
 
 
 def _die(msg: str, code: int = 2) -> "NoReturn":  # type: ignore[name-defined]
@@ -82,6 +91,32 @@ def _validate_slug(slug: str) -> None:
         print(
             f"STORYSTORE_SLUG_NAG: slug {slug!r} has {n} words; target 4-8 words for a durable capability.",
             file=sys.stderr,
+        )
+
+
+def _validate_surface_refs(evidence: dict[str, Any] | None) -> None:
+    """Reject any ``Evidence.Surface`` ref the audit validator would reject.
+
+    Enforces the generator invariant: a written story never carries a surface
+    ref that ``stories-audit`` cannot parse. Exits 2 on the first bad ref.
+    """
+    evidence = evidence or {}
+    surface = evidence.get("surface") or []
+    if not isinstance(surface, list):
+        _die("evidence.surface must be a list of strings", 2)
+    inv = _load_inventory()
+    bad = [
+        ref
+        for ref in surface
+        if not (isinstance(ref, str) and inv.validate_surface_ref(ref))
+    ]
+    if bad:
+        joined = ", ".join(repr(r) for r in bad)
+        _die(
+            f"refusing to write unparseable surface ref(s): {joined}. "
+            f"Use a recognized prefix (cli:, route:, bin:, exports:, skill:, "
+            f"test:, heading:, doc:, schema:, flag:, copy:).",
+            2,
         )
 
 
@@ -224,6 +259,8 @@ def main() -> int:
             _die(f"missing required field: {required!r}", 2)
 
     _validate_slug(payload["slug"])
+
+    _validate_surface_refs(payload.get("evidence"))
 
     data = _apply_defaults(payload, mode)
 

@@ -98,6 +98,8 @@ def _normalize_ref(ref: str) -> Optional[tuple[str, ...]]:
         return ("bin", rest)
     if prefix in ("exports", "export"):
         return ("exports", rest)
+    if prefix == "skill":
+        return ("skill", rest)
     if prefix == "test":
         return ("test", rest)
     if prefix in ("heading", "doc"):
@@ -123,6 +125,8 @@ def _inventory_keys(inventory: dict[str, Any]) -> set[tuple[str, ...]]:
             keys.add(("bin", surface.get("name", "")))
         elif kind == "exports":
             keys.add(("exports", surface.get("name", "")))
+        elif kind == "skill":
+            keys.add(("skill", surface.get("name", "")))
         elif kind == "test":
             keys.add(("test", surface.get("name", "")))
         elif kind == "heading":

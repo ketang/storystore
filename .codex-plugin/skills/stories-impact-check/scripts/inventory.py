@@ -3,7 +3,8 @@
 Stdlib-only. Used by ``stories-audit`` and ``stories-coverage`` to:
 
 - detect repository languages by marker files at depth <= 2;
-- extract user-facing surface inventory (TypeScript-first);
+- extract user-facing surface inventory (TypeScript-first, plus
+  language-agnostic skill directories named by ``SKILL.md`` markers);
 - resolve story evidence references (tests/surface/docs).
 
 See ``shared/spec.md`` for the authoritative behavior contract.
@@ -76,6 +77,11 @@ TS_TEST_SUFFIXES: tuple[str, ...] = (
 
 # Doc filenames whose H2/H3 headings we surface.
 HEADING_DOC_NAMES: frozenset[str] = frozenset({"README.md", "DESIGN.md", "ARCHITECTURE.md"})
+
+# Marker file whose containing directory names a skill surface. Inventoried
+# regardless of detected language so ``skill:`` refs resolve in Python- and
+# markdown-centric repos that ship no TypeScript surfaces.
+SKILL_MARKER_NAME: str = "SKILL.md"
 
 HTTP_METHODS: tuple[str, ...] = ("get", "post", "put", "patch", "delete", "head", "options", "all")
 
@@ -283,6 +289,24 @@ def _extract_package_json(file_path: Path, rel_source: str) -> list[dict[str, An
     return surfaces
 
 
+def _extract_skill_dir(file_path: Path, rel_source: str) -> list[dict[str, Any]]:
+    """Emit a skill surface for a ``SKILL.md`` marker file.
+
+    The skill name is the marker's containing directory name (e.g.
+    ``skills/foo/SKILL.md`` -> ``foo``). A marker at the repository root has
+    no naming directory and is skipped.
+    """
+    # A root-level marker (``rel_source == "SKILL.md"``) has no containing
+    # directory inside the repo; the parent's basename would be the arbitrary
+    # repo-root directory name, so skip it.
+    if "/" not in rel_source:
+        return []
+    name = file_path.parent.name
+    if not name:
+        return []
+    return [{"kind": "skill", "name": name, "source": rel_source}]
+
+
 def _extract_doc_headings(file_path: Path, rel_source: str) -> list[dict[str, Any]]:
     try:
         text = file_path.read_text(encoding="utf-8")
@@ -335,6 +359,10 @@ def build_inventory(
             name = file_path.name
             rel = file_path.relative_to(repo_root).as_posix()
 
+            if name == SKILL_MARKER_NAME:
+                surfaces.extend(_extract_skill_dir(file_path, rel))
+                continue
+
             if name == "package.json":
                 surfaces.extend(_extract_package_json(file_path, rel))
                 continue
@@ -363,6 +391,15 @@ _SURFACE_REF_RE = re.compile(r"^(?P<prefix>[a-zA-Z][a-zA-Z0-9_-]*)\s*:\s*(?P<res
 _ROUTE_REST_RE = re.compile(r"^(?P<method>[A-Z]+)\s+(?P<path>/\S*)\s*$")
 
 
+def validate_surface_ref(ref: str) -> bool:
+    """Public wrapper: return whether *ref* is an accepted surface-ref form.
+
+    Generators call this before writing ``Evidence.Surface`` entries so they
+    cannot emit a ref the audit validator would later reject.
+    """
+    return _validate_surface_ref(ref)
+
+
 def _validate_surface_ref(ref: str) -> bool:
     match = _SURFACE_REF_RE.match(ref)
     if not match:
@@ -381,6 +418,8 @@ def _validate_surface_ref(ref: str) -> bool:
     if prefix == "bin":
         return bool(rest)
     if prefix in ("exports", "export"):
+        return bool(rest)
+    if prefix == "skill":
         return bool(rest)
     if prefix in ("test", "heading", "doc"):
         return bool(rest)

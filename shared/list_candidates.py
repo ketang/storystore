@@ -124,6 +124,8 @@ def _surface_ref(kind: str, name: str) -> str:
         return f"heading: {name}"
     if kind == "script":
         return f"script: {name}"
+    if kind == "skill":
+        return f"skill: {name}"
     return f"{kind}: {name}"
 
 
@@ -142,6 +144,8 @@ def _summary(kind: str, name: str) -> str:
         return f"Documentation heading {name}"
     if kind == "script":
         return f"Package script {name}"
+    if kind == "skill":
+        return f"Skill {name}"
     return f"{kind} {name}"
 
 
@@ -156,7 +160,7 @@ def _surfaces_to_candidates(surfaces: Iterable[dict[str, Any]]) -> dict[tuple[st
             method = surface.get("method", "")
             path = surface.get("path", "")
             name = f"{method} {path}".strip()
-        elif kind in ("bin", "exports", "test"):
+        elif kind in ("bin", "exports", "test", "skill"):
             name = surface.get("name", "")
         elif kind == "heading":
             name = surface.get("text", "")

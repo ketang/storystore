@@ -190,6 +190,40 @@ def test_build_inventory_extracts_readme_headings(tmp_path):
     assert all(h["source"] == "README.md" for h in headings)
 
 
+def test_build_inventory_extracts_skill_directories(tmp_path):
+    # A markdown-only repo whose only user-facing surfaces are skill dirs.
+    for name in ("stories-audit", "stories-generate"):
+        d = tmp_path / "skills" / name
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+    result = inv.build_inventory(tmp_path)
+    skills = [s for s in result["surfaces"] if s["kind"] == "skill"]
+    assert {s["name"] for s in skills} == {"stories-audit", "stories-generate"}
+    assert {s["source"] for s in skills} == {
+        "skills/stories-audit/SKILL.md",
+        "skills/stories-generate/SKILL.md",
+    }
+
+
+def test_build_inventory_skill_extraction_is_language_agnostic(tmp_path):
+    # No language markers at all — skills are still inventoried.
+    d = tmp_path / "catalog" / "skills" / "deploy-app"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("# deploy-app\n", encoding="utf-8")
+    result = inv.build_inventory(tmp_path)
+    assert result["languages"]["detected"] == []
+    assert [s["name"] for s in result["surfaces"] if s["kind"] == "skill"] == [
+        "deploy-app"
+    ]
+
+
+def test_build_inventory_skill_marker_at_root_is_skipped(tmp_path):
+    # A SKILL.md with no naming directory yields no skill surface.
+    (tmp_path / "SKILL.md").write_text("# root\n", encoding="utf-8")
+    result = inv.build_inventory(tmp_path)
+    assert [s for s in result["surfaces"] if s["kind"] == "skill"] == []
+
+
 def test_build_inventory_skips_default_skip_dirs(tmp_path):
     nm = tmp_path / "node_modules" / "lib"
     nm.mkdir(parents=True)
@@ -287,11 +321,13 @@ def test_resolve_evidence_validates_surface_refs(tmp_path):
             "route: get /users",  # lowercase method
             "bin: mytool",
             "exports: ./index",
+            "skill: stories-audit",
             "test: foo bar",
             "unknown-prefix: x",
             "garbled",
             "route: NOT_A_VERB /x",
             "cli:",  # empty rest
+            "skill:",  # empty rest
         ]
     )
     out = inv.resolve_evidence(tmp_path, story)
@@ -301,11 +337,20 @@ def test_resolve_evidence_validates_surface_refs(tmp_path):
     assert by_ref["route: get /users"] is False  # method must be uppercase
     assert by_ref["bin: mytool"] is True
     assert by_ref["exports: ./index"] is True
+    assert by_ref["skill: stories-audit"] is True
     assert by_ref["test: foo bar"] is True
     assert by_ref["unknown-prefix: x"] is False
     assert by_ref["garbled"] is False
     assert by_ref["route: NOT_A_VERB /x"] is False
     assert by_ref["cli:"] is False
+    assert by_ref["skill:"] is False
+
+
+def test_validate_surface_ref_public_wrapper_accepts_skill():
+    assert inv.validate_surface_ref("skill: stories-audit") is True
+    assert inv.validate_surface_ref("skill:stories-audit") is True  # no space
+    assert inv.validate_surface_ref("skill:") is False
+    assert inv.validate_surface_ref("nope: x") is False
 
 
 def test_resolve_evidence_handles_empty_story(tmp_path):
