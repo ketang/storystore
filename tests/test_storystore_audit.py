@@ -643,6 +643,68 @@ Display user-facing error messages.
     assert not _findings_of_kind(report, "copy-evidence-missing"), report
 
 
+def test_doc_evidence_missing_one_finding_per_dangling_path(tmp_path):
+    """One dangling doc path -> exactly one doc-evidence-missing finding naming
+    story and path; strict mode fails."""
+    repo = _init_repo(tmp_path)
+    # Story has a resolvable test so claim-unsupported does not also fire; the
+    # only fidelity problem is the dangling doc path.
+    (repo / "tests").mkdir()
+    (repo / "tests" / "login.spec.ts").write_text("// test\n", encoding="utf-8")
+    _write_story(
+        repo,
+        slug="user-login-flow",
+        tests=["tests/login.spec.ts"],
+        docs=["docs/removed-design.md"],
+    )
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr
+    report = (repo / "audit.md").read_text()
+    findings = _findings_of_kind(report, "doc-evidence-missing")
+    assert len(findings) == 1, report
+    assert "docs/removed-design.md" in report
+    assert "user-login-flow" in report
+    # Strict mode fails when the dangling doc path is present.
+    strict = _run(repo, "--strict")
+    assert strict.returncode == 1, strict.stderr
+
+
+def test_doc_evidence_resolved_no_finding(tmp_path):
+    """No doc-evidence-missing when the declared doc path resolves."""
+    repo = _init_repo(tmp_path)
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "design.md").write_text("# design\n", encoding="utf-8")
+    _write_story(
+        repo,
+        slug="user-login-flow",
+        docs=["docs/design.md"],
+    )
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr
+    report = (repo / "audit.md").read_text()
+    assert not _findings_of_kind(report, "doc-evidence-missing"), report
+
+
+def test_doc_evidence_missing_suppresses_claim_unsupported(tmp_path):
+    """When a story's only evidence is a dangling doc path, the direct
+    doc-evidence-missing finding supersedes the indirect claim-unsupported."""
+    repo = _init_repo(tmp_path)
+    _write_story(
+        repo,
+        slug="user-login-flow",
+        claims=["Login works correctly."],
+        tests=[],
+        surface=[],
+        docs=["docs/removed-design.md"],
+    )
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr
+    report = (repo / "audit.md").read_text()
+    assert len(_findings_of_kind(report, "doc-evidence-missing")) == 1, report
+    # The indirect claim-unsupported finding is suppressed for this story.
+    assert not _findings_of_kind(report, "claim-unsupported"), report
+
+
 def test_perf_warn_threshold_zero_disables(tmp_path):
     """STORYSTORE_PERF_WARN_MS=0 disables the threshold warning."""
     repo = _init_repo(tmp_path)

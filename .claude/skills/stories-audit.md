@@ -80,6 +80,10 @@ Deterministic findings (always emitted):
   extracted inventory.
 - `test-evidence-missing` — a declared test-evidence path no longer
   resolves.
+- `doc-evidence-missing` — a declared doc-evidence path no longer
+  resolves to a file (one finding per story per dangling path). When a
+  story's only evidence is a dangling doc path, this direct finding
+  supersedes the indirect `claim-unsupported` for that story.
 - `claim-unsupported` — an auditable claim has no supporting evidence.
 - `intent-conflict` — stated intent contradicts deterministic evidence.
 
