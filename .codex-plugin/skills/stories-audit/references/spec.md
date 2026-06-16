@@ -497,6 +497,123 @@ integration in v1.
 
 Stderr always carries a one-line human-readable explanation.
 
+## Migration From intent-stories
+
+`storystore` supersedes bento's legacy **intent-stories** trio. The two
+schemas are deliberately incompatible: intent-stories carried a single
+five-valued `authority` axis that conflated *provenance* (where the content
+came from) with *protection* (how cautious agents must be). `storystore`
+splits those into two orthogonal axes — `authority` (`observed | accepted`)
+and `change_resistance` (`low | medium | high | immutable`). Importing a
+legacy story therefore means **decomposing** each old `authority` value into
+an `(authority, change_resistance)` pair, plus a few mechanical field
+renames.
+
+This section documents the conversion. It is the authoritative reference a
+one-shot import (or bento's deprecation issue) points at. The mapping is
+fully specified below; no import logic is bundled because the legacy on-disk
+serialization is not versioned in this repo. (This is distinct from the
+"no story migration logic" non-goal, which concerns storystore's *internal*
+`schema_version` and not a one-time import from a different tool.)
+
+### Field Mapping
+
+| intent-stories field | storystore field    | Conversion rule                                                                                                   |
+|----------------------|---------------------|-------------------------------------------------------------------------------------------------------------------|
+| `id`                 | `slug`              | Reuse if already kebab-case and ≥2 words; otherwise slugify `title`. Honor slug guidance (<2 words is exit 2; 2–3 or 9+ words nag). |
+| `title`              | `title`             | Verbatim.                                                                                                          |
+| `status`             | `status`            | `active`/`deprecated`/`draft` carry over. See note under authority `draft` below — a legacy `authority: draft` forces `status: draft`. There is no `superseded`; map it to `deprecated`. |
+| `authority`          | `authority` + `change_resistance` | Decomposed; see the Authority Collapsing table.                                                       |
+| `protected_sections` | `locked_sections`   | Rename. Keep only entries naming a canonical storystore H2 (`Intent`, `Story`, `Expected Behavior`, `Boundaries`, `Auditable Claims`, `Evidence`, `Drift Notes`); drop or remap others and note the drop. |
+| `last_reviewed`      | — (no equivalent)   | **Do not** map to `last_audited`. See below.                                                                      |
+| —                    | `schema_version`    | Set to `1`.                                                                                                        |
+| —                    | `tests_applicable`  | Omit (defaults `true`). Set `false` only if the legacy story was explicitly non-testable.                         |
+
+Body sections map by name onto storystore's six (`Intent`, `Story`,
+`Expected Behavior`, `Boundaries`, `Auditable Claims`, `Evidence`) plus
+optional `Drift Notes`. `Intent` is hard-required (missing Intent is exit 2):
+if the legacy story has no Intent-equivalent, the import must synthesize one
+for `accepted` stories (flag for human authoring) or fall back to the
+canonical observed placeholder `Inferred from code; not human-confirmed.`
+for `observed` stories. Sections with no storystore home fold into `Story`
+or `Boundaries` prose rather than being silently dropped.
+
+### Authority Collapsing Rules
+
+The five legacy `authority` values collapse onto the `(authority,
+change_resistance)` product as follows:
+
+| intent-stories `authority` | storystore `authority` | storystore `change_resistance` | Also set        |
+|----------------------------|------------------------|--------------------------------|-----------------|
+| `charter`                  | `accepted`             | `immutable`                    | —               |
+| `contract`                 | `accepted`             | `high`                         | —               |
+| `story`                    | `accepted`             | `medium`                       | —               |
+| `observed`                 | `observed`             | `low`                          | —               |
+| `draft`                    | `observed`             | `low`                          | `status: draft` |
+
+Rationale, value by value:
+
+- **`charter` → accepted + immutable.** Charter was the most load-bearing,
+  human-authored intent in intent-stories — foundational rules agents must
+  never rewrite. `immutable` is the only `change_resistance` that
+  unconditionally forbids agent meaning changes, so it is the faithful
+  target. Provenance is human, hence `accepted`.
+- **`contract` → accepted + high.** A contract is a binding human commitment
+  but not declared eternal the way a charter is. `high` requires agents to
+  stop before changing intent, boundaries, or auditable claims, while still
+  permitting human-approved evolution — the right caution for a binding but
+  amendable commitment. Provenance is human, hence `accepted`.
+- **`story` → accepted + medium.** The standard human-authored authority.
+  `medium` is storystore's default caution for accepted intent: agents must
+  classify edit types and preserve meaning unless the user approves. This
+  keeps ordinary accepted stories editable under supervision rather than
+  frozen.
+- **`observed` → observed + low.** Same provenance semantics in both schemas
+  (inferred from current software behavior, descriptive). The validity
+  matrix forbids `observed` with `high`/`immutable`, so `low` is both
+  required and natural: descriptive stories take routine updates when
+  evidence supports them.
+- **`draft` → observed + low + `status: draft`.** A legacy `draft` was
+  *tentative and never human-ratified*, so it must not become `accepted` —
+  doing so would launder unreviewed content into human-approved intent.
+  Provenance is therefore `observed`. Its tentative-lifecycle meaning moves
+  to the axis storystore actually models it on: `status: draft` (storystore
+  has no `proposed`/`draft` *authority*; that role is `status: draft`). The
+  pair is validity-matrix-legal (`observed` + `low`).
+
+The decomposition is information-preserving: every legacy distinction that
+mattered (how protected, whether human-ratified, whether tentative) lands on
+a storystore axis. The only collapse is `charter`/`contract`/`story` all
+sharing `accepted` provenance — which is correct, since all three were
+human-authored — with their differing protection preserved on
+`change_resistance`.
+
+### Fields Without An Equivalent
+
+- **`last_reviewed`.** There is no storystore field with the same meaning.
+  Critically, it must **not** be written to `last_audited`: `last_audited`
+  is written *only* by `stories-audit --bump-clean` and asserts a clean
+  deterministic (and, with D-pass, narrative-clean) audit — a machine fact,
+  not a human-review date. Copying `last_reviewed` there would fabricate an
+  audit that never ran. Recommended handling: drop it from frontmatter, and
+  optionally preserve the date as a `Drift Notes` line such as
+  `Imported from intent-stories; last human review YYYY-MM-DD.` so the
+  provenance is not lost.
+- **Any legacy frontmatter key not in the storystore schema.** Unknown keys
+  are hard errors in storystore (the parser rejects them), so the import
+  must drop them rather than carry them through. Preserve anything
+  semantically meaningful as prose in `Story` or `Drift Notes`.
+
+### Post-Import Validation
+
+Imported stories are ordinary storystore stories and must satisfy the
+schema: the validity matrix (`observed` cannot be `high`/`immutable`;
+`tests_applicable: false` forbids non-empty `Evidence.Tests`), the
+hard-required `Intent`, and slug word-count rules. Run `stories-audit` after
+import to surface evidence refs that no longer resolve against the new repo,
+and `stories-coverage` to find imported stories that landed below the
+completeness threshold.
+
 ## Non-Goals For V1
 
 - No CI integration.
