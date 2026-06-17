@@ -317,6 +317,13 @@ def all_inventory_keys(
     Unlike the surface-uncovered scan (which filters to a configurable set of
     ``surface_kinds``), the gate must resolve any deterministic surface ref, so
     this collects keys for every kind that has a canonical representation.
+
+    ``audit.py`` runs the same surface-ref→inventory resolution for its
+    ``surface-missing`` finding using a *tuple*-key scheme
+    (``audit._normalize_ref`` / ``audit._inventory_keys``); this module uses
+    the pre-existing *string*-key scheme (``ref_to_key`` / ``surface_key``)
+    shared with the surface-uncovered scan. The two must agree on which refs
+    resolve; ``test_gate_and_audit_resolvers_agree`` guards against drift.
     """
     keys: set[str] = set()
     surfaces = list(inventory.get("surfaces", []) or [])
@@ -642,9 +649,7 @@ def collect_findings(
     findings: list[Finding] = []
     findings.extend(sorted(surface_findings, key=lambda f: f.sort_key))
     findings.extend(sorted(untested_findings, key=lambda f: f.sort_key))
-    findings.extend(
-        sorted(evidence_unresolved_findings, key=lambda f: (f.story_slug or ""))
-    )
+    findings.extend(sorted(evidence_unresolved_findings, key=lambda f: f.sort_key))
     findings.extend(incomplete_findings)
 
     metrics = {

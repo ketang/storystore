@@ -650,6 +650,55 @@ def test_pickpackit_modeled_story_downgraded(tmp_path):
     assert "story-evidence-unresolved: orders-clean" not in report
 
 
+def test_gate_and_audit_resolvers_agree():
+    """The gate (coverage.py string-key scheme) and audit.py (tuple-key
+    scheme) must classify the same surface refs identically, so the two
+    independent resolvers cannot drift apart."""
+    AUDIT_PATH = REPO_ROOT / "shared" / "audit.py"
+    audit = _load("storystore_audit", AUDIT_PATH)
+
+    inventory = {
+        "surfaces": [
+            {"kind": "http-route", "method": "GET", "path": "/real"},
+            {"kind": "cli-command", "name": "login"},
+        ]
+    }
+    refs = [
+        "route: GET /real",   # resolves
+        "route: GET /fake",   # fabricated
+        "cli: login",         # resolves
+        "cli: logout",        # fabricated
+        "doc: anything.md",   # unverified kind — neither resolver flags it
+    ]
+
+    # audit.py resolution decision: a ref is "missing" when it normalizes to a
+    # matchable inventory kind and is absent from the inventory keys.
+    audit_keys = audit._inventory_keys(inventory)
+    audit_missing = set()
+    for ref in refs:
+        key = audit._normalize_ref(ref)
+        if key is None or key[0] in ("test", "heading", "schema", "flag", "copy"):
+            continue
+        if key not in audit_keys:
+            audit_missing.add(ref)
+
+    # coverage gate resolution decision over the same refs.
+    cov_keys = cov.all_inventory_keys(inventory)
+    resolved = {
+        "surface_refs": [{"ref": r, "valid": True} for r in refs],
+        "tests_missing": [],
+        "docs_missing": [],
+        "schema_missing": [],
+        "flag_missing": [],
+        "copy_missing": [],
+    }
+    story = _make_story_obj()
+    cov_missing = set(cov.unresolved_deterministic_refs(story, resolved, cov_keys))
+
+    assert audit_missing == {"route: GET /fake", "cli: logout"}
+    assert cov_missing == audit_missing
+
+
 def test_unverified_only_unresolved_refs_keep_complete(tmp_path):
     """Acceptance 3: a story whose only unresolved refs are unverified kinds
     (doc:/heading:/test:) keeps its Complete rating — documented policy."""
