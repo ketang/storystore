@@ -378,6 +378,7 @@ Emitted by `stories-coverage`.
 | `surface-uncovered` | A user-facing surface has no story.                          |
 | `story-untested`    | An active story has no test evidence (unless `tests_applicable: false`). |
 | `story-incomplete`  | An active story scores below `--completeness-min-rating`.    |
+| `story-evidence-unresolved` | An active story would rate Complete on volume but declares deterministically-checkable evidence that does not resolve; its rating is capped at Substantial (see Evidence-Resolution Gate). |
 
 Default surface kinds: `cli-command,http-route,package-bin`. Public exports
 are opt-in.
@@ -412,6 +413,39 @@ Score 0–50 maps to ratings:
 `--completeness-min-rating` (default `substantial`), capped at
 `--completeness-limit` (default 20), worst first. User-facing presentation
 uses qualitative ratings; numeric scores stay in JSON for ranking.
+
+### Evidence-Resolution Gate
+
+The five-dimension score above measures volume (word, claim, and ref counts),
+not accuracy: a story can score Complete while declaring fabricated or
+unresolvable evidence. Volume is necessary but not sufficient. The gate makes
+resolution a first-class input to the rating.
+
+An active story that scores in the Complete band (45–50) is capped at
+**Substantial** when it declares any *deterministically-checkable* evidence
+ref that does not resolve against the repository. The gate consumes the
+deterministic resolution results (`resolve_evidence`); it does not reimplement
+resolution. A capped story emits `story-evidence-unresolved`, which names every
+unresolved ref so the report identifies the fabrication. This finding is not
+subject to `--completeness-limit`.
+
+Deterministically-checkable (gated) evidence:
+
+- `Evidence.Tests`, `Evidence.Docs`, `Evidence.Schema`, `Evidence.Flag`, and
+  `Evidence.Copy` refs that fail to resolve.
+- `Evidence.Surface` refs that are malformed, or that name an inventory-backed
+  surface (`cli:`, `route:`, `bin:`, `exports:`, `skill:`, `schema:`, `copy:`)
+  absent from the repository.
+
+Unverified (non-gated) evidence: `Evidence.Surface` refs using the syntax-only
+prefixes `test:`, `heading:`, and `doc:` are outside deterministic reach. They
+are validated for syntax only and never block the Complete rating. **Policy: a
+story whose only unresolved refs are unverified kinds keeps its volume-derived
+rating, including Complete.** Such refs are surfaced by the narrative audit
+pass, not by this deterministic gate.
+
+The gate only lowers a rating; it never raises one. It does not change the
+per-dimension scores, which remain a pure function of the story text.
 
 ### Language Coverage Header
 
