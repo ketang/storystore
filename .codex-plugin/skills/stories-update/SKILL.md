@@ -74,15 +74,10 @@ For findings classified as code-side bugs, append to the drift todo via
 `drift_todo.py` and do **not** edit the story:
 
 ```bash
-PYTHONPATH="$STORYSTORE_SHARED" python3 - <<'PY'
-from drift_todo import append_drift_todo
-
-append_drift_todo(
-    slug="<story-slug>",
-    description="<human-readable description of the mismatch>",
-    metadata={"finding_kind": "<kind>", "suggested_action": "fix-code"},
-)
-PY
+python3 "$STORYSTORE_SHARED/drift_todo.py" \
+  --slug "<story-slug>" \
+  --description "<human-readable description of the mismatch>" \
+  --kind "<finding-kind>"
 ```
 
 The drift todo defaults to `docs/stories/drift-todo.md` (gitignored;
