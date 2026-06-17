@@ -17,7 +17,7 @@ maintained glossary at the moment an agent is about to introduce a new
 top-level concept identifier. It is complementary to — and explicitly
 narrower than — the planned `concepts-cohere` detection track, which uses
 the `object-catalog` lens to surface same-name drift in already-written
-code (see `2026-05-20-storystore-plan-4-concepts.md`). Prevention catches
+code. Prevention catches
 naming drift at write time; detection catches conceptual drift at audit
 time. Both are needed.
 
