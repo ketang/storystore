@@ -10,7 +10,7 @@ Manual verification command set (for reference):
     scripts/build-plugin -v
 
     # Init a fresh repo
-    python3 scripts/stories-init-mechanical --repo-root /tmp/test-repo
+    python3 shared/stories_init_mechanical.py --repo-root /tmp/test-repo
 
     # List candidates
     python3 shared/list_candidates.py --repo-root /tmp/test-repo
@@ -274,7 +274,7 @@ class TestInitMechanicalFlow:
         repo = tmp_path / "repo"
         repo.mkdir()
         (repo / "README.md").write_text("# Test repo\n")
-        result = _run_script("scripts/stories-init-mechanical", repo)
+        result = _run_script("shared/stories_init_mechanical.py", repo)
         assert result.returncode == 0, f"init failed: {result.stderr}"
 
         data = result.json()
@@ -289,9 +289,9 @@ class TestInitMechanicalFlow:
         repo = tmp_path / "repo"
         repo.mkdir()
         (repo / "README.md").write_text("# Test repo\n")
-        _run_script("scripts/stories-init-mechanical", repo)
+        _run_script("shared/stories_init_mechanical.py", repo)
 
-        result = _run_script("scripts/stories-init-mechanical", repo)
+        result = _run_script("shared/stories_init_mechanical.py", repo)
         assert result.returncode == 0
         data = result.json()
         assert data["fresh_init"] is False
@@ -581,7 +581,7 @@ class TestFullLifecycleE2E:
         (repo / "src" / "app.ts").write_text("export function main() {}\n")
 
         # 1. Init
-        init_result = _run_script("scripts/stories-init-mechanical", repo)
+        init_result = _run_script("shared/stories_init_mechanical.py", repo)
         assert init_result.returncode == 0, f"init failed: {init_result.stderr}"
         assert (repo / "docs" / "stories" / "README.md").exists()
 

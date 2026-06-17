@@ -85,11 +85,17 @@ def test_materialization_covers_all_packaging_json_skills(tmp_path):
         assert (out / "skills" / skill / "references" / "spec.md").exists(), f"{skill}: spec.md missing"
 
 
-def test_skills_without_packaging_json_unaffected(tmp_path):
+def test_stories_init_and_update_materialize_declared_scripts(tmp_path):
     out = setup_build(tmp_path)
-    for skill in ("stories-init", "stories-update"):
-        scripts = out / "skills" / skill / "scripts"
-        assert not (scripts / "storystore_lib.py").exists(), f"{skill}: unexpected storystore_lib.py"
+    scripts = out / "skills" / "stories-init" / "scripts"
+    assert (scripts / "storystore_lib.py").exists(), "stories-init: storystore_lib.py missing"
+    assert (scripts / "inventory.py").exists(), "stories-init: inventory.py missing"
+    assert (scripts / "stories_init_mechanical.py").exists(), (
+        "stories-init: stories_init_mechanical.py missing"
+    )
+    scripts = out / "skills" / "stories-update" / "scripts"
+    assert (scripts / "storystore_lib.py").exists(), "stories-update: storystore_lib.py missing"
+    assert (scripts / "audit.py").exists(), "stories-update: audit.py missing"
 
 
 # ---------------------------------------------------------------------------

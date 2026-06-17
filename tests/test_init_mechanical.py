@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / "scripts" / "stories-init-mechanical"
+SCRIPT = REPO_ROOT / "shared" / "stories_init_mechanical.py"
 
 
 def run(repo_root: Path) -> dict:

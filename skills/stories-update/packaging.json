@@ -1,0 +1,1 @@
+{"shared_scripts": ["audit.py", "drift_todo.py", "edit_section.py", "impact_check.py", "inventory.py", "lock_check.py", "spec.md", "storystore_lib.py"]}

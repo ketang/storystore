@@ -28,7 +28,7 @@ from .llm_provider import LLMProvider, ZolemProvider
 
 WRITE_STORY_SCRIPT = REPO_ROOT / "shared" / "write_story.py"
 LIST_CANDIDATES_SCRIPT = REPO_ROOT / "shared" / "list_candidates.py"
-INIT_MECHANICAL_SCRIPT = REPO_ROOT / "scripts" / "stories-init-mechanical"
+INIT_MECHANICAL_SCRIPT = REPO_ROOT / "shared" / "stories_init_mechanical.py"
 LIB_PATH = REPO_ROOT / "shared" / "storystore_lib.py"
 
 # Fixtures designed for init-quality tests (contain discoverable surfaces).

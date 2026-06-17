@@ -36,12 +36,11 @@ SKILLS_WITH_PACKAGING = {
     "stories-coverage",
     "stories-generate",
     "stories-impact-check",
-}
-
-SKILLS_WITHOUT_PACKAGING = {
     "stories-init",
     "stories-update",
 }
+
+SKILLS_WITHOUT_PACKAGING: set[str] = set()
 
 # ── Derived packaging expectations ──────────────────────────────────
 

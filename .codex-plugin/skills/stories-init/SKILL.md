@@ -6,7 +6,7 @@ description: Initialize docs/stories/ for a repository — create the directory,
 # stories-init
 
 Initialize `docs/stories/` in two phases. Phase 1 is mechanical and is
-already implemented by `scripts/stories-init-mechanical`. This skill
+already implemented by the `stories_init_mechanical.py` shared script. This skill
 documents Phase 2: the LLM-driven seeding pass that runs only on a fresh
 init.
 
@@ -35,16 +35,15 @@ STORYSTORE_SHARED="$(for d in "$skill_dir/scripts" "$skill_dir/../../shared"; do
 
 If `STORYSTORE_SHARED` comes back empty, the plugin is not laid out as
 expected — stop and report rather than guessing a path. Every shared-script
-invocation below runs as `python3 "$STORYSTORE_SHARED/<script>.py"`. The Phase 1
-mechanical tool is not a shared script — it lives in the plugin's top-level
-`scripts/` dir, reached as `"$skill_dir/../../scripts/stories-init-mechanical"`.
+invocation below — including the Phase 1 mechanical tool — runs as
+`python3 "$STORYSTORE_SHARED/<script>.py"`.
 
 ## Phase 1 (mechanical)
 
 Run the bundled script:
 
 ```bash
-"$skill_dir/../../scripts/stories-init-mechanical" --repo-root <repo-root>
+python3 "$STORYSTORE_SHARED/stories_init_mechanical.py" --repo-root <repo-root>
 ```
 
 It creates missing `docs/stories/` scaffolding (`README.md`, `INDEX.md`),
