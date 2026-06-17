@@ -478,6 +478,252 @@ def test_schema_evidence_counts_in_completeness():
     assert cov.score_story(s).evidence == 10
 
 
+# --------------------------------------------------------------------------- #
+# Evidence-resolution gate
+# --------------------------------------------------------------------------- #
+
+
+def _make_ts_routes(repo_root: Path, *routes: tuple[str, str]) -> None:
+    """Write a TS server exposing HTTP routes given as (method, path) pairs."""
+    (repo_root / "package.json").write_text('{"name":"x"}', encoding="utf-8")
+    src = repo_root / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    body = "\n".join(
+        f'app.{method.lower()}("{path}", h);' for method, path in routes
+    )
+    (src / "server.ts").write_text(body + "\n", encoding="utf-8")
+
+
+def _complete_story_kwargs(**overrides) -> dict:
+    """Sections sized so a story scores in the Complete band (45-50)."""
+    base = dict(
+        story_section="word " * 60,        # 10
+        expected_behavior="word " * 35,    # 10
+        boundaries_section="word " * 25,    # 10
+        auditable_claims="- a\n- b\n- c",   # 10
+    )
+    base.update(overrides)
+    return base
+
+
+def test_all_inventory_keys_collects_routes_and_cli():
+    inventory = {
+        "surfaces": [
+            {"kind": "http-route", "method": "get", "path": "/users"},
+            {"kind": "cli-command", "name": "login"},
+            {"kind": "skill", "name": "deploy"},
+        ]
+    }
+    keys = cov.all_inventory_keys(inventory)
+    assert "route:GET /users" in keys
+    assert "cli:login" in keys
+    assert "skill:deploy" in keys
+
+
+def test_unresolved_deterministic_refs_flags_missing_route_and_doc():
+    story = _make_story_obj(
+        evidence_surface=["route: GET /real", "route: GET /fake"],
+        evidence_docs=["MISSING.md"],
+    )
+    resolved = {
+        "surface_refs": [
+            {"ref": "route: GET /real", "valid": True},
+            {"ref": "route: GET /fake", "valid": True},
+        ],
+        "docs_missing": ["MISSING.md"],
+        "tests_missing": [],
+        "schema_missing": [],
+        "flag_missing": [],
+        "copy_missing": [],
+    }
+    inventory_keys = {"route:GET /real"}
+    unresolved = cov.unresolved_deterministic_refs(story, resolved, inventory_keys)
+    assert "route: GET /fake" in unresolved
+    assert "MISSING.md" in unresolved
+    assert "route: GET /real" not in unresolved
+
+
+def test_unresolved_deterministic_refs_excludes_unverified_kinds():
+    story = _make_story_obj(evidence_surface=["doc: design.md", "heading: Overview"])
+    resolved = {
+        "surface_refs": [
+            {"ref": "doc: design.md", "valid": True},
+            {"ref": "heading: Overview", "valid": True},
+        ],
+        "docs_missing": [],
+        "tests_missing": [],
+        "schema_missing": [],
+        "flag_missing": [],
+        "copy_missing": [],
+    }
+    # No inventory keys at all: unverified prefixes must still be excluded.
+    assert cov.unresolved_deterministic_refs(story, resolved, set()) == []
+
+
+def test_fabricated_route_blocks_complete_and_names_ref(tmp_path):
+    """Acceptance 1: a Complete-by-volume story with a fabricated route is
+    capped below Complete, and the report names the unresolved ref."""
+    _make_ts_routes(tmp_path, ("get", "/real"))
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "s.spec.ts").write_text("// test\n", encoding="utf-8")
+    _write_story(
+        tmp_path,
+        "checkout",
+        **_complete_story_kwargs(
+            evidence_tests=["t/s.spec.ts"],
+            evidence_surface=["route: GET /real", "route: GET /fake"],
+        ),
+    )
+    proc = _run_coverage_cli(tmp_path)
+    out = json.loads(proc.stdout)
+    report = Path(out["report_path"]).read_text(encoding="utf-8")
+    assert "story-evidence-unresolved" in report
+    assert "route: GET /fake" in report
+    assert "capped at **substantial**" in report
+    # The real route must not be named as unresolved.
+    block = report.split("story-evidence-unresolved", 1)[1]
+    assert "route: GET /real" not in block
+
+
+def test_fabricated_doc_path_blocks_complete(tmp_path):
+    """Acceptance 1: a fabricated file-path ref also blocks Complete."""
+    _make_ts_routes(tmp_path, ("get", "/real"))
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "s.spec.ts").write_text("// test\n", encoding="utf-8")
+    _write_story(
+        tmp_path,
+        "checkout",
+        **_complete_story_kwargs(
+            evidence_tests=["t/s.spec.ts"],
+            evidence_surface=["route: GET /real"],
+            evidence_docs=["docs/GHOST.md"],
+        ),
+    )
+    proc = _run_coverage_cli(tmp_path)
+    out = json.loads(proc.stdout)
+    report = Path(out["report_path"]).read_text(encoding="utf-8")
+    assert "story-evidence-unresolved" in report
+    assert "docs/GHOST.md" in report
+
+
+def test_pickpackit_modeled_story_downgraded(tmp_path):
+    """Acceptance 2: a fixture modeled on the pickpackit case — high
+    word/claim/ref counts with one fabricated endpoint — is downgraded from
+    Complete, while an otherwise-identical clean story stays Complete."""
+    _make_ts_routes(
+        tmp_path,
+        ("get", "/orders"),
+        ("post", "/orders"),
+        ("get", "/orders/:id"),
+    )
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "orders.spec.ts").write_text("// test\n", encoding="utf-8")
+
+    real_refs = ["route: GET /orders", "route: POST /orders", "route: GET /orders/:id"]
+
+    # Clean twin: every ref resolves → stays Complete (no gate finding).
+    _write_story(
+        tmp_path,
+        "orders-clean",
+        **_complete_story_kwargs(
+            evidence_tests=["t/orders.spec.ts"],
+            evidence_surface=real_refs,
+        ),
+    )
+    # Pickpackit-like: identical high volume, but one fabricated endpoint.
+    _write_story(
+        tmp_path,
+        "orders-pickpackit",
+        **_complete_story_kwargs(
+            evidence_tests=["t/orders.spec.ts"],
+            evidence_surface=real_refs + ["route: DELETE /orders/:id"],
+        ),
+    )
+    proc = _run_coverage_cli(tmp_path)
+    out = json.loads(proc.stdout)
+    report = Path(out["report_path"]).read_text(encoding="utf-8")
+
+    # The fabricated story is downgraded and named.
+    assert "story-evidence-unresolved: orders-pickpackit" in report
+    assert "route: DELETE /orders/:id" in report
+    # The clean twin keeps Complete: no gate finding for it.
+    assert "story-evidence-unresolved: orders-clean" not in report
+
+
+def test_gate_and_audit_resolvers_agree():
+    """The gate (coverage.py string-key scheme) and audit.py (tuple-key
+    scheme) must classify the same surface refs identically, so the two
+    independent resolvers cannot drift apart."""
+    AUDIT_PATH = REPO_ROOT / "shared" / "audit.py"
+    audit = _load("storystore_audit", AUDIT_PATH)
+
+    inventory = {
+        "surfaces": [
+            {"kind": "http-route", "method": "GET", "path": "/real"},
+            {"kind": "cli-command", "name": "login"},
+        ]
+    }
+    refs = [
+        "route: GET /real",   # resolves
+        "route: GET /fake",   # fabricated
+        "cli: login",         # resolves
+        "cli: logout",        # fabricated
+        "doc: anything.md",   # unverified kind — neither resolver flags it
+    ]
+
+    # audit.py resolution decision: a ref is "missing" when it normalizes to a
+    # matchable inventory kind and is absent from the inventory keys.
+    audit_keys = audit._inventory_keys(inventory)
+    audit_missing = set()
+    for ref in refs:
+        key = audit._normalize_ref(ref)
+        if key is None or key[0] in ("test", "heading", "schema", "flag", "copy"):
+            continue
+        if key not in audit_keys:
+            audit_missing.add(ref)
+
+    # coverage gate resolution decision over the same refs.
+    cov_keys = cov.all_inventory_keys(inventory)
+    resolved = {
+        "surface_refs": [{"ref": r, "valid": True} for r in refs],
+        "tests_missing": [],
+        "docs_missing": [],
+        "schema_missing": [],
+        "flag_missing": [],
+        "copy_missing": [],
+    }
+    story = _make_story_obj()
+    cov_missing = set(cov.unresolved_deterministic_refs(story, resolved, cov_keys))
+
+    assert audit_missing == {"route: GET /fake", "cli: logout"}
+    assert cov_missing == audit_missing
+
+
+def test_unverified_only_unresolved_refs_keep_complete(tmp_path):
+    """Acceptance 3: a story whose only unresolved refs are unverified kinds
+    (doc:/heading:/test:) keeps its Complete rating — documented policy."""
+    _make_ts_routes(tmp_path, ("get", "/real"))
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "s.spec.ts").write_text("// test\n", encoding="utf-8")
+    _write_story(
+        tmp_path,
+        "checkout",
+        **_complete_story_kwargs(
+            evidence_tests=["t/s.spec.ts"],
+            evidence_surface=[
+                "route: GET /real",
+                "doc: never-resolved.md",
+                "heading: Some Heading",
+            ],
+        ),
+    )
+    proc = _run_coverage_cli(tmp_path)
+    out = json.loads(proc.stdout)
+    report = Path(out["report_path"]).read_text(encoding="utf-8")
+    assert "story-evidence-unresolved" not in report
+    assert "story-incomplete" not in report
+
+
 def test_completeness_limit_caps_incomplete_findings(tmp_path):
     _make_ts_cli(tmp_path)  # no surfaces
     # Write 3 incomplete stories, with --completeness-limit=2 only 2 emitted.

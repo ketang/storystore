@@ -111,6 +111,8 @@ def surface_key(kind: str, *, name: str = "", method: str = "", path: str = "") 
         return f"bin:{name.strip()}"
     if kind == "exports":
         return f"exports:{name.strip()}"
+    if kind == "skill":
+        return f"skill:{name.strip()}"
     if kind == "schema":
         return f"schema:{name.strip()}"
     if kind == "copy":
@@ -140,6 +142,8 @@ def ref_to_key(ref: str) -> Optional[str]:
         return f"bin:{rest}"
     if prefix in ("exports", "export"):
         return f"exports:{rest}"
+    if prefix == "skill":
+        return f"skill:{rest}"
     if prefix == "schema":
         return f"schema:{rest}"
     if prefix == "copy":
@@ -275,6 +279,113 @@ def rating_for_score(score: int) -> str:
     if score < 0:
         return "skeletal"
     return "complete"
+
+
+# --------------------------------------------------------------------------- #
+# Evidence-resolution gate
+# --------------------------------------------------------------------------- #
+#
+# Volume (word/claim/ref counts) is necessary but not sufficient for the
+# Complete rating: a story can declare three fabricated refs and still score
+# Evidence=10. The gate caps the rating below Complete for any story that
+# declares deterministically-checkable evidence which does not resolve against
+# the repository. See ``shared/spec.md`` ("Evidence-Resolution Gate") for the
+# authoritative policy, including the treatment of unverified evidence kinds.
+
+# Surface-ref prefixes storystore can only syntax-check — there is no
+# deterministic inventory to resolve them against. An unresolved ref of one of
+# these kinds is "unverified", not "failed", so it never blocks Complete.
+UNVERIFIED_SURFACE_PREFIXES: frozenset[str] = frozenset({"test", "heading", "doc"})
+
+# Rating the gate caps a would-be-Complete story down to.
+GATE_CAPPED_RATING = "substantial"
+
+
+def _surface_prefix(ref: str) -> Optional[str]:
+    m = _SURFACE_REF_RE.match(ref.strip())
+    if not m:
+        return None
+    return m.group(1).lower()
+
+
+def all_inventory_keys(
+    inventory: dict[str, Any],
+    inferred_surfaces: Optional[list[dict[str, Any]]] = None,
+) -> set[str]:
+    """Canonical keys for every inventory surface, across all kinds.
+
+    Unlike the surface-uncovered scan (which filters to a configurable set of
+    ``surface_kinds``), the gate must resolve any deterministic surface ref, so
+    this collects keys for every kind that has a canonical representation.
+
+    ``audit.py`` runs the same surface-ref→inventory resolution for its
+    ``surface-missing`` finding using a *tuple*-key scheme
+    (``audit._normalize_ref`` / ``audit._inventory_keys``); this module uses
+    the pre-existing *string*-key scheme (``ref_to_key`` / ``surface_key``)
+    shared with the surface-uncovered scan. The two must agree on which refs
+    resolve; ``test_gate_and_audit_resolvers_agree`` guards against drift.
+    """
+    keys: set[str] = set()
+    surfaces = list(inventory.get("surfaces", []) or [])
+    if inferred_surfaces:
+        surfaces = surfaces + list(inferred_surfaces)
+    for surface in surfaces:
+        if not isinstance(surface, dict):
+            continue
+        key = surface_key(
+            str(surface.get("kind", "")),
+            name=str(surface.get("name", "")),
+            method=str(surface.get("method", "")),
+            path=str(surface.get("path", "")),
+        )
+        if key is not None:
+            keys.add(key)
+    return keys
+
+
+def unresolved_deterministic_refs(
+    story: Any,
+    resolved: dict[str, Any],
+    inventory_keys: set[str],
+) -> list[str]:
+    """Return the story's evidence refs that deterministically fail to resolve.
+
+    Consumes the output of ``inventory.resolve_evidence`` — it does not re-run
+    resolution. A ref counts as a deterministic failure when storystore can
+    mechanically check it and the check fails:
+
+      * Tests / Docs / Schema / Flag / Copy refs that did not resolve.
+      * Surface refs that are malformed, or that name an inventory-backed
+        surface (``cli:``/``route:``/``bin:``/``exports:``/``skill:``/
+        ``schema:``/``copy:``) absent from the repository.
+
+    Surface refs whose prefix is syntax-only (``test:``/``heading:``/``doc:``)
+    are *unverified*, not failed, and are deliberately excluded so they never
+    block the Complete rating.
+    """
+    out: list[str] = []
+    if getattr(story, "tests_applicable", True):
+        out.extend(resolved.get("tests_missing", []) or [])
+    out.extend(resolved.get("docs_missing", []) or [])
+    out.extend(resolved.get("schema_missing", []) or [])
+    out.extend(resolved.get("flag_missing", []) or [])
+    out.extend(resolved.get("copy_missing", []) or [])
+    for entry in resolved.get("surface_refs", []) or []:
+        ref = entry.get("ref", "")
+        if not entry.get("valid"):
+            # Malformed refs definitively do not resolve.
+            out.append(ref)
+            continue
+        if _surface_prefix(ref) in UNVERIFIED_SURFACE_PREFIXES:
+            continue
+        key = ref_to_key(ref)
+        if key is None:
+            # Recognized but with no canonical inventory mapping — treat as
+            # unverified rather than as a failure.
+            continue
+        if key not in inventory_keys:
+            out.append(ref)
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -418,6 +529,11 @@ def collect_findings(
     # ---- story-untested + story-incomplete ---------------------------------
     untested_findings: list[Finding] = []
     incomplete_candidates: list[tuple[int, Finding]] = []
+    evidence_unresolved_findings: list[Finding] = []
+
+    gate_inventory_keys = all_inventory_keys(
+        inventory, inferred_surfaces if inferred_surfaces else None
+    )
 
     placeholder_slugs: list[str] = []
 
@@ -431,9 +547,10 @@ def collect_findings(
         if intent == PLACEHOLDER_INTENT:
             placeholder_slugs.append(slug)
 
+        resolved = inv.resolve_evidence(repo_root, story)
+
         # story-untested
         if getattr(story, "tests_applicable", True):
-            resolved = inv.resolve_evidence(repo_root, story)
             if not resolved["tests_resolved"]:
                 sev = severity_for_story(story)
                 untested_findings.append(
@@ -457,6 +574,46 @@ def collect_findings(
         # story-incomplete
         breakdown = score_story(story)
         rating = rating_for_score(breakdown.total())
+
+        # Evidence-resolution gate: a story that scores Complete on volume
+        # alone cannot be rated Complete while it declares deterministically-
+        # checkable evidence that does not resolve. Cap the rating and name the
+        # offending refs. Unverified evidence kinds (test:/heading:/doc:) are
+        # excluded by unresolved_deterministic_refs, so a story whose only
+        # unresolved refs are unverified keeps its Complete rating.
+        if rating == "complete":
+            unresolved = unresolved_deterministic_refs(
+                story, resolved, gate_inventory_keys
+            )
+            if unresolved:
+                rating = GATE_CAPPED_RATING
+                ref_lines = "\n".join(f"- `{r}`" for r in unresolved)
+                evidence_unresolved_findings.append(
+                    Finding(
+                        kind="story-evidence-unresolved",
+                        story_slug=slug,
+                        severity=severity_for_story(story),
+                        suggested_action="fix-code",
+                        title=f"story-evidence-unresolved: {slug}",
+                        body=(
+                            f"Active story `{slug}` scores "
+                            f"{breakdown.total()}/50 on volume (Complete) but "
+                            f"declares evidence that does not resolve against "
+                            f"the repository, so its completeness rating is "
+                            f"capped at **{GATE_CAPPED_RATING}**. Complete "
+                            f"requires every deterministically-checkable "
+                            f"evidence ref to resolve.\n"
+                            "\n"
+                            "Unresolved evidence refs:\n"
+                            f"{ref_lines}\n"
+                            "\n"
+                            "Fix the code or the references so they resolve, "
+                            "or remove the fabricated refs."
+                        ),
+                        sort_key=(2, -1, slug),
+                    )
+                )
+
         min_rank = RATING_RANK.get(completeness_min_rating, RATING_RANK["substantial"])
         if RATING_RANK.get(rating, 0) < min_rank:
             sev = severity_for_story(story)
@@ -492,6 +649,7 @@ def collect_findings(
     findings: list[Finding] = []
     findings.extend(sorted(surface_findings, key=lambda f: f.sort_key))
     findings.extend(sorted(untested_findings, key=lambda f: f.sort_key))
+    findings.extend(sorted(evidence_unresolved_findings, key=lambda f: f.sort_key))
     findings.extend(incomplete_findings)
 
     metrics = {
