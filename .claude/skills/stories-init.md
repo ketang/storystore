@@ -250,6 +250,28 @@ Review the diff, rebuild generated plugin/docs outputs when the repo
 tracks them, run the selected verification command, and report the
 branch/worktree, tracker item, and verification result.
 
+**Install the landing gate.** A seeded corpus only earns its keep if drift
+is actually caught, and `stories-audit` is read-only — nothing schedules it.
+The plugin ships a copyable bento `land-work` `pre` hook that runs the strict
+audit before every merge: a clean corpus lands, a corpus with findings is
+blocked. Offer to install it (or tell the user how):
+
+```bash
+# from the plugin root (where shared/ and examples/ live)
+install -m 755 examples/land-work/hook-scripts/pre/30-stories-audit.sh \
+  <repo-root>/.agent-plugins/bento/bento/land-work/hook-scripts/pre/30-stories-audit.sh
+```
+
+The script exits 0 when `docs/stories/INDEX.md` is absent (no corpus to
+audit) and otherwise runs `shared/audit.py --repo-root <root> --strict`,
+exiting nonzero on findings. It resolves `shared/audit.py` via
+`$STORYSTORE_SHARED` (set it to pin a specific install), falling back to the
+plugin tree and the Claude plugin cache. See the script's header comment for
+details. Unlike the `stories-impact-check` gate (which only fires for
+`accepted`/`active` stories — see **Promotion Path** above), this audit checks
+*fidelity* and fires for every story regardless of authority: a seeded
+`observed` corpus is blocked the moment its declared evidence stops resolving.
+
 **Report the agent-instruction pointer outcome.** The completion report must
 name every file in Phase 1's `agent_instruction_files` list and state its
 pointer outcome from Step 6 — `applied`, `already-present`, or `declined`
