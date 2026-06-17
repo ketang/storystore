@@ -47,6 +47,9 @@ REQUIRED_DIR_PREFIXES = [
     "shared/",
     "scripts/",
     ".claude/skills/",
+    # Copyable example hook scripts (e.g. the land-work landing gate) must
+    # reach consumers in the published bundle, not just the git checkout.
+    "examples/",
 ]
 
 
