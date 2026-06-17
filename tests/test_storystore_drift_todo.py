@@ -209,3 +209,68 @@ class TestMultipleAppends:
         )
         content = (tmp_path / "drift-todo.md").read_text()
         assert "```json" not in content
+
+
+# --------------------------------------------------------------------------- #
+# CLI (argparse / __main__ entrypoint)
+# --------------------------------------------------------------------------- #
+
+
+def run_cli(*args: str) -> subprocess.CompletedProcess:
+    """Invoke shared/drift_todo.py as a command-line script."""
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True,
+        text=True,
+    )
+
+
+class TestCli:
+    """Exercise the argparse CLI added on top of append_drift_todo."""
+
+    def test_writes_file_and_reports_path_on_stdout(self, tmp_path: Path):
+        drift_file = tmp_path / "drift-todo.md"
+        result = run_cli(
+            "--slug", "user-login",
+            "--description", "Login button text diverged from story.",
+            "--kind", "intent-contradiction",
+            "--drift-todo-path", str(drift_file),
+        )
+        assert result.returncode == 0, result.stderr
+
+        # Path is reported on stdout as JSON (matching audit.py/coverage.py).
+        summary = json.loads(result.stdout)
+        assert summary == {"drift_todo_path": str(drift_file)}
+
+        content = drift_file.read_text()
+        assert "## " in content and "user-login" in content
+        assert "Login button text diverged from story." in content
+
+    def test_kind_maps_to_finding_kind_metadata(self, tmp_path: Path):
+        drift_file = tmp_path / "drift-todo.md"
+        run_cli(
+            "--slug", "with-kind",
+            "--description", "Has a kind.",
+            "--kind", "missing-evidence",
+            "--drift-todo-path", str(drift_file),
+        )
+        content = drift_file.read_text()
+        assert '"finding_kind": "missing-evidence"' in content
+        assert '"suggested_action": "fix-code"' in content
+
+    def test_kind_optional_still_writes_suggested_action(self, tmp_path: Path):
+        drift_file = tmp_path / "drift-todo.md"
+        result = run_cli(
+            "--slug", "no-kind",
+            "--description", "No kind supplied.",
+            "--drift-todo-path", str(drift_file),
+        )
+        assert result.returncode == 0, result.stderr
+        content = drift_file.read_text()
+        assert '"suggested_action": "fix-code"' in content
+        assert "finding_kind" not in content
+
+    def test_missing_required_args_exit_nonzero(self, tmp_path: Path):
+        result = run_cli("--slug", "lonely")
+        assert result.returncode != 0
+        assert "--description" in result.stderr

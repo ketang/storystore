@@ -6,7 +6,9 @@ Markdown sections to a drift-todo file.
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -76,3 +78,39 @@ def append_drift_todo(
             f.write(entry)
 
     return path
+
+
+# --------------------------------------------------------------------------- #
+# Main
+# --------------------------------------------------------------------------- #
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--slug", required=True,
+                        help="The story slug that drifted.")
+    parser.add_argument("--description", required=True,
+                        help="Human-readable description of the mismatch.")
+    parser.add_argument("--kind", default=None,
+                        help="Finding kind; recorded as metadata.finding_kind.")
+    parser.add_argument("--drift-todo-path", default=None,
+                        help="Override the default docs/stories/drift-todo.md path.")
+    args = parser.parse_args(argv)
+
+    metadata: dict[str, Any] = {"suggested_action": "fix-code"}
+    if args.kind:
+        metadata["finding_kind"] = args.kind
+
+    path = append_drift_todo(
+        args.slug,
+        args.description,
+        metadata=metadata,
+        drift_todo_path=args.drift_todo_path,
+    )
+    json.dump({"drift_todo_path": str(path)}, sys.stdout, indent=2, sort_keys=True)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
