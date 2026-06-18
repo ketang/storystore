@@ -370,7 +370,6 @@ immutable -> high (flagged)
 ```
 
 Fixed: `intent-conflict` is high; `agent-pointer-missing` is low.
-
 The schema, copy, and flag missing-evidence findings use the same
 `change_resistance`-derived severity as other deterministic evidence findings;
 they do not add severity exceptions.
