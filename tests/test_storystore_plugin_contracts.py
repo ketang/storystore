@@ -467,7 +467,18 @@ FORBIDDEN_STUB_PHRASES = (
 
 class TestNoStubLanguageInSkills:
     """Release gate: published SKILL.md files must not advertise themselves
-    as unimplemented stubs."""
+    as unimplemented stubs.
+
+    The check runs against three locations in lockstep:
+      1. The canonical source in skills/<name>/SKILL.md
+      2. The generated Codex payload in .codex-plugin/skills/<name>/SKILL.md
+      3. The generated Claude payload in .claude/skills/<name>.md
+
+    Checking all three directly (rather than relying on content-match tests
+    transitively) means the gate fires even if the content-match tests are
+    skipped, the build step was omitted, or someone edits a generated file
+    independently of its canonical source.
+    """
 
     @pytest.mark.parametrize("skill", EXPECTED_SKILLS)
     def test_canonical_skill_has_no_stub_phrase(self, skill):
@@ -476,6 +487,39 @@ class TestNoStubLanguageInSkills:
         assert not hits, (
             f"skills/{skill}/SKILL.md contains stub language {hits}; "
             "rewrite with real invocation instructions before publishing"
+        )
+
+    @pytest.mark.parametrize("skill", EXPECTED_SKILLS)
+    def test_codex_skill_has_no_stub_phrase(self, skill):
+        """Deployed Codex payload must not carry stub / deferred language.
+
+        This catches drift between the canonical source and .codex-plugin/
+        independently of the content-match test in TestCodexSkillDirs, so
+        the gate fires even when the build step was skipped.
+        """
+        path = CODEX_SKILLS_DIR / skill / "SKILL.md"
+        text = path.read_text().lower()
+        hits = [p for p in FORBIDDEN_STUB_PHRASES if p in text]
+        assert not hits, (
+            f".codex-plugin/skills/{skill}/SKILL.md contains stub language "
+            f"{hits}; rebuild with scripts/build-plugin and verify the "
+            "canonical source has real invocation instructions"
+        )
+
+    @pytest.mark.parametrize("skill", EXPECTED_SKILLS)
+    def test_claude_skill_has_no_stub_phrase(self, skill):
+        """Deployed Claude skill file must not carry stub / deferred language.
+
+        Mirrors the Codex check: catches drift between canonical source and
+        .claude/skills/ independently of the content-match test.
+        """
+        path = CLAUDE_SKILLS_DIR / f"{skill}.md"
+        text = path.read_text().lower()
+        hits = [p for p in FORBIDDEN_STUB_PHRASES if p in text]
+        assert not hits, (
+            f".claude/skills/{skill}.md contains stub language {hits}; "
+            "rebuild with scripts/build-plugin and verify the canonical "
+            "source has real invocation instructions"
         )
 
     def test_all_canonical_skills_scanned(self):
